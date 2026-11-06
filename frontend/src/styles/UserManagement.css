@@ -1,0 +1,370 @@
+.user-management-page {
+  padding: 40px 20px;
+  max-width: 1200px;
+  margin: 0 auto;
+}
+
+.user-management-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 40px;
+  gap: 20px;
+}
+
+.user-management-header h1 {
+  font-size: 32px;
+  font-weight: 700;
+  color: #1a202c;
+  margin: 0;
+}
+
+.user-management-header p {
+  color: #718096;
+  margin: 8px 0 0;
+}
+
+.user-management-filters {
+  display: flex;
+  gap: 12px;
+  margin-bottom: 30px;
+  flex-wrap: wrap;
+}
+
+.filter-btn {
+  padding: 10px 16px;
+  border: 2px solid #e2e8f0;
+  background: white;
+  border-radius: 8px;
+  font-size: 14px;
+  font-weight: 600;
+  color: #4a5568;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.filter-btn:hover {
+  border-color: #cbd5e0;
+  background-color: #f7fafc;
+}
+
+.filter-btn.active {
+  background-color: #667eea;
+  color: white;
+  border-color: #667eea;
+}
+
+.users-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
+  gap: 20px;
+}
+
+.user-card {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
+
+.user-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 16px;
+}
+
+.user-header h3 {
+  font-size: 18px;
+  font-weight: 700;
+  color: #1a202c;
+  margin: 0;
+}
+
+.user-header .email {
+  color: #718096;
+  font-size: 13px;
+  margin: 4px 0 0;
+}
+
+.user-details {
+  border-top: 1px solid #e2e8f0;
+  border-bottom: 1px solid #e2e8f0;
+  padding: 16px 0;
+}
+
+.user-details p {
+  font-size: 13px;
+  color: #4a5568;
+  margin: 8px 0;
+  display: flex;
+  justify-content: space-between;
+}
+
+.user-details .label {
+  font-weight: 600;
+  color: #2d3748;
+}
+
+.user-details .status {
+  padding: 3px 8px;
+  border-radius: 4px;
+  font-size: 12px;
+  font-weight: 600;
+}
+
+.user-details .status.active {
+  background-color: #c6f6d5;
+  color: #22543d;
+}
+
+.user-details .status.inactive {
+  background-color: #fed7d7;
+  color: #742a2a;
+}
+
+.user-details .warning-text {
+  color: #c05621;
+  background-color: #feebc8;
+  padding: 8px 12px;
+  border-radius: 4px;
+  margin: 8px 0 !important;
+}
+
+.user-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.action-btn {
+  flex: 1;
+  min-width: 120px;
+  padding: 10px 14px;
+  border: none;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.action-btn.reset {
+  background-color: #bee3f8;
+  color: #1e3a8a;
+}
+
+.action-btn.reset:hover {
+  background-color: #90cdf4;
+}
+
+.action-btn.deactivate {
+  background-color: #fed7d7;
+  color: #742a2a;
+}
+
+.action-btn.deactivate:hover {
+  background-color: #fc8181;
+}
+
+.action-btn.activate {
+  background-color: #c6f6d5;
+  color: #22543d;
+}
+
+.action-btn.activate:hover {
+  background-color: #9ae6b4;
+}
+
+.empty-state,
+.loading {
+  text-align: center;
+  color: #718096;
+  padding: 40px 20px;
+  font-size: 16px;
+}
+
+/* Modal Styles */
+.form-group {
+  margin-bottom: 20px;
+}
+
+.form-group label {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: #2d3748;
+  margin-bottom: 6px;
+}
+
+.form-group input,
+.form-group select {
+  width: 100%;
+  padding: 10px 12px;
+  border: 2px solid #e2e8f0;
+  border-radius: 6px;
+  font-size: 13px;
+  font-family: 'Inter', sans-serif;
+  transition: all 0.3s ease;
+  box-sizing: border-box;
+}
+
+.form-group input:focus,
+.form-group select:focus {
+  outline: none;
+  border-color: #667eea;
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+.modal-actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 24px;
+  justify-content: flex-end;
+}
+
+.modal-actions .btn {
+  padding: 10px 20px;
+  font-size: 14px;
+  font-weight: 600;
+  border: none;
+  border-radius: 6px;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.modal-actions .btn-primary {
+  background-color: #667eea;
+  color: white;
+}
+
+.modal-actions .btn-primary:hover {
+  background-color: #5568d3;
+}
+
+.modal-actions .btn-secondary {
+  background-color: #e2e8f0;
+  color: #2d3748;
+}
+
+.modal-actions .btn-secondary:hover {
+  background-color: #cbd5e0;
+}
+
+/* Temporary Password Modal */
+.temp-password-modal {
+  padding: 20px 0;
+}
+
+.info-text {
+  color: #4a5568;
+  font-size: 14px;
+  margin: 0 0 20px;
+  line-height: 1.6;
+}
+
+.password-box {
+  background-color: #f7fafc;
+  border: 2px solid #e2e8f0;
+  border-radius: 8px;
+  padding: 16px;
+  margin-bottom: 24px;
+}
+
+.password-display {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 12px;
+}
+
+.password-display code {
+  flex: 1;
+  background-color: #edf2f7;
+  padding: 12px 16px;
+  border-radius: 6px;
+  font-family: 'Monaco', 'Menlo', monospace;
+  font-size: 14px;
+  color: #1a202c;
+  word-break: break-all;
+}
+
+.copy-btn {
+  padding: 8px 14px;
+  background-color: #667eea;
+  color: white;
+  border: none;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  white-space: nowrap;
+  transition: all 0.3s ease;
+}
+
+.copy-btn:hover {
+  background-color: #5568d3;
+}
+
+.warning-section {
+  background-color: #fffaf0;
+  border-left: 4px solid #f6ad55;
+  padding: 16px;
+  border-radius: 6px;
+  margin-bottom: 20px;
+}
+
+.warning-title {
+  font-weight: 600;
+  color: #7c2d12;
+  margin: 0 0 8px;
+  font-size: 13px;
+}
+
+.warning-section ul {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+}
+
+.warning-section li {
+  font-size: 13px;
+  color: #92400e;
+  padding: 4px 0;
+  padding-left: 20px;
+  position: relative;
+}
+
+.warning-section li:before {
+  content: '•';
+  position: absolute;
+  left: 8px;
+  font-weight: bold;
+}
+
+@media (max-width: 768px) {
+  .user-management-page {
+    padding: 20px;
+  }
+
+  .user-management-header {
+    flex-direction: column;
+  }
+
+  .user-management-header .btn {
+    width: 100%;
+  }
+
+  .users-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .user-actions {
+    gap: 6px;
+  }
+
+  .action-btn {
+    min-width: 100px;
+    padding: 8px 12px;
+    font-size: 11px;
+  }
+}

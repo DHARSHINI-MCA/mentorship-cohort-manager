@@ -1,0 +1,383 @@
+.session-scheduling-page {
+  padding: 40px 20px;
+  max-width: 1000px;
+  margin: 0 auto;
+}
+
+.page-header {
+  margin-bottom: 30px;
+}
+
+.page-header h1 {
+  font-size: 32px;
+  font-weight: 700;
+  color: #1a202c;
+  margin: 0 0 8px;
+}
+
+.page-header p {
+  color: #718096;
+  font-size: 15px;
+  margin: 0;
+}
+
+/* Batch Selector */
+.batch-selector {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-width: 300px;
+}
+
+.batch-selector label {
+  font-size: 13px;
+  font-weight: 600;
+  color: #2d3748;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.batch-selector select {
+  padding: 10px 12px;
+  border: 2px solid #e2e8f0;
+  border-radius: 6px;
+  font-size: 14px;
+  font-family: 'Inter', sans-serif;
+  background-color: white;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.batch-selector select:focus {
+  outline: none;
+  border-color: #667eea;
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+/* Session Controls */
+.session-controls {
+  display: flex;
+  justify-content: flex-start;
+  gap: 12px;
+  margin-bottom: 30px;
+}
+
+.btn {
+  padding: 10px 20px;
+  border: none;
+  border-radius: 6px;
+  font-size: 14px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.btn-primary {
+  background-color: #667eea;
+  color: white;
+}
+
+.btn-primary:hover {
+  background-color: #5568d3;
+  transform: translateY(-2px);
+  box-shadow: 0 10px 20px rgba(102, 126, 234, 0.2);
+}
+
+/* Sessions List */
+.sessions-list {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.session-item {
+  padding: 20px;
+  display: flex;
+  flex-direction: column;
+  gap: 14px;
+}
+
+.session-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: 12px;
+}
+
+.session-header h3 {
+  font-size: 18px;
+  font-weight: 700;
+  color: #1a202c;
+  margin: 0;
+}
+
+.session-header div {
+  flex: 1;
+}
+
+.session-datetime {
+  font-size: 13px;
+  color: #718096;
+  margin: 4px 0 0;
+}
+
+.session-description {
+  font-size: 13px;
+  color: #4a5568;
+  line-height: 1.6;
+  margin: 0;
+}
+
+/* Session Details */
+.session-details {
+  background-color: #f7fafc;
+  padding: 12px;
+  border-radius: 6px;
+  border-left: 3px solid #667eea;
+}
+
+.session-details p {
+  font-size: 13px;
+  color: #2d3748;
+  margin: 6px 0;
+}
+
+.session-details strong {
+  color: #1a202c;
+  font-weight: 600;
+}
+
+.session-details a {
+  color: #667eea;
+  text-decoration: none;
+  font-weight: 600;
+}
+
+.session-details a:hover {
+  text-decoration: underline;
+}
+
+/* Attendance Summary */
+.attendance-summary {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(100px, 1fr));
+  gap: 12px;
+  padding: 12px 0;
+  border-top: 1px solid #e2e8f0;
+  border-bottom: 1px solid #e2e8f0;
+}
+
+.attendance-summary .stat {
+  text-align: center;
+}
+
+.attendance-summary .label {
+  display: block;
+  font-size: 11px;
+  color: #718096;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  font-weight: 600;
+  margin-bottom: 4px;
+}
+
+.attendance-summary .value {
+  display: block;
+  font-size: 18px;
+  font-weight: 700;
+  color: #2d3748;
+}
+
+.attendance-summary .value.present {
+  color: #48bb78;
+}
+
+/* Session Actions */
+.session-actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.action-btn {
+  flex: 1;
+  min-width: 120px;
+  padding: 10px 12px;
+  border: none;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.3s ease;
+}
+
+.action-btn.primary {
+  background-color: #667eea;
+  color: white;
+}
+
+.action-btn.primary:hover:not(:disabled) {
+  background-color: #5568d3;
+}
+
+.action-btn.primary:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+
+.action-btn.secondary {
+  background-color: #e2e8f0;
+  color: #2d3748;
+}
+
+.action-btn.secondary:hover {
+  background-color: #cbd5e0;
+}
+
+/* Empty State */
+.empty-state {
+  text-align: center;
+  padding: 40px 20px;
+  color: #718096;
+}
+
+.loading-text {
+  text-align: center;
+  padding: 40px 20px;
+  color: #718096;
+}
+
+/* Form Styles */
+.form-group {
+  margin-bottom: 20px;
+}
+
+.form-group label {
+  display: block;
+  font-size: 13px;
+  font-weight: 600;
+  color: #2d3748;
+  margin-bottom: 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+}
+
+.form-group input,
+.form-group select,
+.form-group textarea {
+  width: 100%;
+  padding: 10px 12px;
+  border: 2px solid #e2e8f0;
+  border-radius: 6px;
+  font-size: 13px;
+  font-family: 'Inter', sans-serif;
+  transition: all 0.3s ease;
+  box-sizing: border-box;
+}
+
+.form-group input:focus,
+.form-group select:focus,
+.form-group textarea:focus {
+  outline: none;
+  border-color: #667eea;
+  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+}
+
+.form-row {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(150px, 1fr));
+  gap: 16px;
+}
+
+.modal-actions {
+  display: flex;
+  gap: 12px;
+  margin-top: 24px;
+  justify-content: flex-end;
+}
+
+.btn-secondary {
+  background-color: #e2e8f0;
+  color: #2d3748;
+}
+
+.btn-secondary:hover {
+  background-color: #cbd5e0;
+}
+
+/* Mark Attendance Modal */
+.mark-attendance-modal {
+  padding: 20px 0;
+}
+
+.session-info {
+  font-size: 14px;
+  font-weight: 600;
+  color: #1a202c;
+  margin: 0 0 12px;
+}
+
+.trainee-count {
+  font-size: 13px;
+  color: #718096;
+  margin: 0 0 16px;
+}
+
+.attendance-note {
+  background-color: #edf2f7;
+  border-left: 4px solid #667eea;
+  padding: 12px;
+  border-radius: 6px;
+  margin-bottom: 20px;
+}
+
+.attendance-note p {
+  font-size: 13px;
+  color: #2d3748;
+  margin: 4px 0;
+}
+
+.attendance-note .helper-text {
+  font-size: 12px;
+  color: #718096;
+  font-style: italic;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .session-scheduling-page {
+    padding: 20px;
+  }
+
+  .page-header h1 {
+    font-size: 24px;
+  }
+
+  .session-header {
+    flex-direction: column;
+  }
+
+  .form-row {
+    grid-template-columns: 1fr;
+  }
+
+  .session-actions {
+    flex-direction: column;
+  }
+
+  .action-btn {
+    width: 100%;
+  }
+
+  .modal-actions {
+    flex-direction: column;
+  }
+
+  .btn {
+    width: 100%;
+  }
+
+  .attendance-summary {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}

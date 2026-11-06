@@ -1,0 +1,93 @@
+services:
+  mongo:
+    image: mongo:7
+    restart: unless-stopped
+    ports:
+      - "${MONGO_PORT:-27017}:27017"
+    environment:
+      MONGO_INITDB_DATABASE: ${DATABASE_NAME:-cohort_manager}
+    volumes:
+      - mongo_data:/data/db
+    healthcheck:
+      test: ["CMD", "mongosh", "--quiet", "--eval", "db.adminCommand('ping').ok"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  backend:
+    image: cohort-manager-backend:local
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      mongo:
+        condition: service_healthy
+    environment:
+      MONGODB_URL: mongodb://mongo:27017
+      DATABASE_NAME: ${DATABASE_NAME:-cohort_manager}
+      JWT_SECRET: ${JWT_SECRET:-local-development-only-change-before-deployment}
+      ACCESS_TOKEN_EXPIRE_MINUTES: ${ACCESS_TOKEN_EXPIRE_MINUTES:-1440}
+    ports:
+      - "${BACKEND_PORT:-8000}:8000"
+    healthcheck:
+      test: ["CMD", "curl", "--fail", "--silent", "http://127.0.0.1:8000/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 20s
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    restart: unless-stopped
+    depends_on:
+      backend:
+        condition: service_healthy
+    ports:
+      - "${FRONTEND_PORT:-3000}:80"
+    healthcheck:
+      test: ["CMD-SHELL", "wget -q -O /dev/null http://127.0.0.1/ || exit 1"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # Optional demo data setup. seed.py clears and recreates application data;
+  # run this explicitly only when you intend to reset the database.
+  seed:
+    profiles: ["demo-seed"]
+    image: cohort-manager-backend:local
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    depends_on:
+      mongo:
+        condition: service_healthy
+    environment:
+      MONGODB_URL: mongodb://mongo:27017
+      DATABASE_NAME: ${DATABASE_NAME:-cohort_manager}
+      JWT_SECRET: ${JWT_SECRET:-local-development-only-change-before-deployment}
+      PYTHONUNBUFFERED: "1"
+    command: ["python", "seed.py"]
+    restart: "no"
+
+  demo-nominator:
+    profiles: ["demo-nominator"]
+    image: cohort-manager-backend:local
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    depends_on:
+      mongo:
+        condition: service_healthy
+    environment:
+      MONGODB_URL: mongodb://mongo:27017
+      DATABASE_NAME: ${DATABASE_NAME:-cohort_manager}
+      JWT_SECRET: ${JWT_SECRET:-local-development-only-change-before-deployment}
+    command: ["python", "create_demo_nominator.py"]
+
+volumes:
+  mongo_data:

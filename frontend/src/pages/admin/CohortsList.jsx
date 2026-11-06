@@ -1,0 +1,771 @@
+import React, { useState } from 'react';
+import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { Link } from 'react-router-dom';
+import api from '../../api/client';
+import { useToast } from '../../context/ToastContext';
+import { Card, CardBody, CardFooter } from '../../components/Card';
+import { Badge } from '../../components/Badge';
+import { ProgressBar } from '../../components/ProgressBar';
+import { SkeletonCard } from '../../components/SkeletonCard';
+import { EmptyState } from '../../components/EmptyState';
+import { Modal } from '../../components/Modal';
+import { 
+  PlusCircle, Calendar, Award, Users, ArrowRight, 
+  Edit3, Layers, BookOpen, MessageSquare, Plus, Trash2, 
+  ChevronRight, Sparkles, AlertCircle, Check, Search
+} from 'lucide-react';
+
+export function CohortsList() {
+  const [isModalOpen, setIsModalOpen] = useState(false);
+  const [editingCohort, setEditingCohort] = useState(null);
+  const [name, setName] = useState('');
+  const [description, setDescription] = useState('');
+  const [startDate, setStartDate] = useState('');
+  const [endDate, setEndDate] = useState('');
+
+  // Template and Customization States
+  const [selectedTrainingTplId, setSelectedTrainingTplId] = useState('');
+  const [selectedFeedbackTplId, setSelectedFeedbackTplId] = useState('');
+  const [isCustomizingPlan, setIsCustomizingPlan] = useState(false);
+  const [customPlan, setCustomPlan] = useState({ name: '', totalWeeks: 4, weeks: [] });
+  const [isCustomizingForm, setIsCustomizingForm] = useState(false);
+  const [customForm, setCustomForm] = useState({ name: '', fields: [] });
+  const [selectedTalentNextCourses, setSelectedTalentNextCourses] = useState([]);
+  const [talentNextSearch, setTalentNextSearch] = useState('');
+
+  const queryClient = useQueryClient();
+  const { showToast } = useToast();
+
+  // Fetch Cohorts
+  const { data: cohortsData, isLoading } = useQuery({
+    queryKey: ['cohorts'],
+    queryFn: async () => {
+      const res = await api.get('/cohorts?limit=50');
+      return res.data;
+    },
+  });
+
+  // Fetch Available Training Templates
+  const { data: trainingTemplates } = useQuery({
+    queryKey: ['trainingTemplatesList'],
+    queryFn: async () => {
+      const res = await api.get('/training-templates?limit=100');
+      return res.data?.items || [];
+    },
+  });
+
+  // Fetch Available Feedback Templates
+  const { data: feedbackTemplates } = useQuery({
+    queryKey: ['feedbackTemplatesList'],
+    queryFn: async () => {
+      const res = await api.get('/feedback-templates?limit=100');
+      return res.data?.items || [];
+    },
+  });
+
+  // Fetch Available TalentNext Courses
+  const { data: talentnextCourses } = useQuery({
+    queryKey: ['talentnextCoursesList'],
+    queryFn: async () => {
+      const res = await api.get('/talentnext-courses');
+      return res.data || [];
+    },
+  });
+
+  const saveMutation = useMutation({
+    mutationFn: async (payload) => {
+      if (editingCohort) {
+        return await api.put(`/cohorts/${editingCohort.id}`, payload);
+      } else {
+        return await api.post('/cohorts', payload);
+      }
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['cohorts'] });
+      queryClient.invalidateQueries({ queryKey: ['adminDashboard'] });
+      showToast(editingCohort ? 'Cohort updated successfully' : 'Cohort created and configured successfully');
+      handleCloseModal();
+    },
+    onError: (err) => {
+      showToast(err.response?.data?.detail || 'Failed to save cohort', 'error');
+    },
+  });
+
+  // Quick helper to extend date by N weeks
+  const handleOpenCreate = () => {
+    setEditingCohort(null);
+    setName('');
+    setDescription('');
+    
+    // Default 4 weeks timeline
+    const today = new Date();
+    const fourWeeksLater = new Date();
+    fourWeeksLater.setDate(today.getDate() + 28);
+    setStartDate(today.toISOString().split('T')[0]);
+    setEndDate(fourWeeksLater.toISOString().split('T')[0]);
+
+    // Select first training template by default if available
+    if (trainingTemplates && trainingTemplates.length > 0) {
+      const firstTpl = trainingTemplates[0];
+      setSelectedTrainingTplId(firstTpl.id);
+      setCustomPlan(JSON.parse(JSON.stringify(firstTpl)));
+    } else {
+      setSelectedTrainingTplId('');
+      setCustomPlan({ name: '', totalWeeks: 4, weeks: [] });
+    }
+
+    // Select first feedback template by default if available
+    if (feedbackTemplates && feedbackTemplates.length > 0) {
+      const firstFb = feedbackTemplates[0];
+      setSelectedFeedbackTplId(firstFb.id);
+      setCustomForm(JSON.parse(JSON.stringify(firstFb)));
+    } else {
+      setSelectedFeedbackTplId('');
+      setCustomForm({ name: '', fields: [] });
+    }
+
+    // Reset TalentNext courses selection
+    setSelectedTalentNextCourses([]);
+
+    setIsCustomizingPlan(false);
+    setIsCustomizingForm(false);
+    setIsModalOpen(true);
+  };
+
+  const handleOpenEdit = (e, cohort) => {
+    e.preventDefault();
+    e.stopPropagation();
+    setEditingCohort(cohort);
+    setName(cohort.name);
+    setDescription(cohort.description || '');
+    setStartDate(cohort.startDate);
+    setEndDate(cohort.endDate);
+    setIsCustomizingPlan(false);
+    setIsCustomizingForm(false);
+    setSelectedTalentNextCourses(cohort.talentnextCourses || []);
+    setIsModalOpen(true);
+  };
+
+  const handleCloseModal = () => {
+    setIsModalOpen(false);
+    setEditingCohort(null);
+  };
+
+  // When admin picks a different training template from dropdown
+  const handleSelectTrainingTemplate = (tplId) => {
+    setSelectedTrainingTplId(tplId);
+    if (!tplId) {
+      setCustomPlan({ name: '', totalWeeks: 0, weeks: [] });
+      return;
+    }
+    const tpl = trainingTemplates?.find((t) => t.id === tplId);
+    if (tpl) {
+      setCustomPlan(JSON.parse(JSON.stringify(tpl)));
+    }
+  };
+
+  // When admin picks a different feedback template from dropdown
+  const handleSelectFeedbackTemplate = (tplId) => {
+    setSelectedFeedbackTplId(tplId);
+    if (!tplId) {
+      setCustomForm({ name: '', fields: [] });
+      return;
+    }
+    const fb = feedbackTemplates?.find((f) => f.id === tplId);
+    if (fb) {
+      setCustomForm(JSON.parse(JSON.stringify(fb)));
+    }
+  };
+
+  // Custom Plan Helpers
+  const handleAddWeek = () => {
+    const nextWeekNum = (customPlan.weeks?.length || 0) + 1;
+    setCustomPlan((prev) => ({
+      ...prev,
+      totalWeeks: nextWeekNum,
+      weeks: [
+        ...(prev.weeks || []),
+        {
+          weekNumber: nextWeekNum,
+          title: `Week ${nextWeekNum} - Deep Dive & Practice`,
+          courses: [
+            { title: `Module ${nextWeekNum}.1 Core Concepts`, description: '', durationHrs: 2.0 }
+          ]
+        }
+      ]
+    }));
+  };
+
+  const handleRemoveWeek = (weekIndex) => {
+    setCustomPlan((prev) => {
+      const filtered = prev.weeks.filter((_, idx) => idx !== weekIndex);
+      // Re-number weeks
+      const renumbered = filtered.map((w, idx) => ({ ...w, weekNumber: idx + 1 }));
+      return {
+        ...prev,
+        totalWeeks: renumbered.length,
+        weeks: renumbered
+      };
+    });
+  };
+
+  const handleAddCourseToWeek = (weekIndex) => {
+    setCustomPlan((prev) => {
+      const weeks = [...prev.weeks];
+      const targetWeek = { ...weeks[weekIndex] };
+      targetWeek.courses = [
+        ...(targetWeek.courses || []),
+        { title: 'New Course Module', description: '', durationHrs: 1.0 }
+      ];
+      weeks[weekIndex] = targetWeek;
+      return { ...prev, weeks };
+    });
+  };
+
+  const handleUpdateCourseInWeek = (weekIndex, courseIndex, field, value) => {
+    setCustomPlan((prev) => {
+      const weeks = [...prev.weeks];
+      const targetWeek = { ...weeks[weekIndex] };
+      const courses = [...targetWeek.courses];
+      courses[courseIndex] = { ...courses[courseIndex], [field]: value };
+      targetWeek.courses = courses;
+      weeks[weekIndex] = targetWeek;
+      return { ...prev, weeks };
+    });
+  };
+
+  const handleRemoveCourseFromWeek = (weekIndex, courseIndex) => {
+    setCustomPlan((prev) => {
+      const weeks = [...prev.weeks];
+      const targetWeek = { ...weeks[weekIndex] };
+      targetWeek.courses = targetWeek.courses.filter((_, idx) => idx !== courseIndex);
+      weeks[weekIndex] = targetWeek;
+      return { ...prev, weeks };
+    });
+  };
+
+  // Custom Form Helpers
+  const handleAddField = () => {
+    const nextNum = (customForm.fields?.length || 0) + 1;
+    setCustomForm((prev) => ({
+      ...prev,
+      fields: [
+        ...(prev.fields || []),
+        {
+          key: `field_${nextNum}`,
+          label: `Evaluation Metric ${nextNum}`,
+          type: 'rating',
+          options: [],
+          required: true
+        }
+      ]
+    }));
+  };
+
+  const handleRemoveField = (idx) => {
+    setCustomForm((prev) => ({
+      ...prev,
+      fields: prev.fields.filter((_, i) => i !== idx)
+    }));
+  };
+
+  const handleUpdateField = (idx, key, val) => {
+    setCustomForm((prev) => {
+      const fields = [...prev.fields];
+      fields[idx] = { ...fields[idx], [key]: val };
+      return { ...prev, fields };
+    });
+  };
+
+  const handleSubmit = (e) => {
+    e.preventDefault();
+    if (!name || !startDate || !endDate) {
+      showToast('Please provide cohort name, start date, and end date', 'warning');
+      return;
+    }
+
+    const payload = {
+      name,
+      description,
+      startDate,
+      endDate,
+      nominatorIds: [],
+      talentnextCourses: selectedTalentNextCourses,
+    };
+
+    if (!editingCohort) {
+      if (isCustomizingPlan && customPlan.weeks?.length > 0) {
+        payload.customTrainingPlan = {
+          name: customPlan.name || `${name} Training Plan`,
+          totalWeeks: customPlan.totalWeeks || customPlan.weeks.length,
+          weeks: customPlan.weeks
+        };
+      } else if (selectedTrainingTplId) {
+        payload.trainingTemplateId = selectedTrainingTplId;
+      }
+
+      if (isCustomizingForm && customForm.fields?.length > 0) {
+        payload.customFeedbackForm = {
+          name: customForm.name || `${name} Feedback Form`,
+          fields: customForm.fields
+        };
+      } else if (selectedFeedbackTplId) {
+        payload.feedbackTemplateId = selectedFeedbackTplId;
+      }
+    }
+
+    saveMutation.mutate(payload);
+  };
+
+  return (
+    <div className="space-y-8">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+        <div>
+          <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight">
+            Mentorship Cohorts
+          </h1>
+          <p className="text-sm text-slate-500 mt-1">
+            Manage onboarding cohorts, track assignments, and mentor-trainee pairings
+          </p>
+        </div>
+        <button
+          onClick={handleOpenCreate}
+          className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold rounded-xl shadow-sm flex items-center gap-2 transition-all shrink-0"
+        >
+          <PlusCircle className="w-4 h-4" />
+          <span>New Cohort</span>
+        </button>
+      </div>
+
+      {/* Cohorts Grid */}
+      {isLoading ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          <SkeletonCard count={6} />
+        </div>
+      ) : cohortsData?.items?.length === 0 ? (
+        <EmptyState
+          icon={Layers}
+          title="No cohorts found"
+          description="Create your first cohort to initiate track planning and nominations."
+          action={
+            <button
+              onClick={handleOpenCreate}
+              className="px-4 py-2 bg-emerald-600 text-white text-xs font-bold rounded-xl flex items-center gap-1.5"
+            >
+              <PlusCircle className="w-4 h-4" />
+              <span>Create First Cohort</span>
+            </button>
+          }
+        />
+      ) : (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+          {cohortsData?.items?.map((cohort) => (
+            <Card key={cohort.id} hover className="flex flex-col justify-between">
+              <CardBody className="p-6">
+                <div className="flex justify-between items-start gap-2 mb-3">
+                  <h3 className="font-bold text-slate-800 text-base line-clamp-1">{cohort.name}</h3>
+                  <div className="flex items-center gap-1.5 shrink-0">
+                    <Badge variant={cohort.status}>{cohort.status}</Badge>
+                    <button
+                      onClick={(e) => handleOpenEdit(e, cohort)}
+                      className="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
+                      title="Edit cohort details"
+                    >
+                      <Edit3 className="w-3.5 h-3.5" />
+                    </button>
+                  </div>
+                </div>
+
+                <p className="text-xs text-slate-500 line-clamp-2 mb-5 min-h-[32px]">
+                  {cohort.description || 'No description provided.'}
+                </p>
+
+                <div className="space-y-3.5 pt-3 border-t border-slate-100">
+                  <ProgressBar percent={cohort.avgProgress || 0} size="sm" />
+
+                  <div className="grid grid-cols-2 gap-2 text-xs text-slate-600">
+                    <div className="flex items-center gap-1.5">
+                      <Award className="w-3.5 h-3.5 text-blue-500" />
+                      <span>{cohort.mentorCount} Mentors</span>
+                    </div>
+                    <div className="flex items-center gap-1.5">
+                      <Users className="w-3.5 h-3.5 text-purple-500" />
+                      <span>{cohort.activeTraineeCount ?? cohort.traineeCount} Active Trainees</span>
+                    </div>
+                  </div>
+
+                  <div className="flex items-center gap-1.5 text-[11px] text-slate-400">
+                    <Calendar className="w-3.5 h-3.5" />
+                    <span>{cohort.startDate} to {cohort.endDate}</span>
+                  </div>
+                </div>
+              </CardBody>
+
+              <CardFooter className="bg-slate-50/50">
+                <span className="text-[11px] font-semibold text-slate-500">
+                  <span>{cohort.assignedTraineeCount} assigned · {cohort.droppedOutTraineeCount || 0} dropped out</span>
+                </span>
+                <Link
+                  to={`/admin/cohorts/${cohort.id}`}
+                  className="text-xs font-bold text-emerald-600 hover:text-emerald-700 flex items-center gap-1"
+                >
+                  <span>Open Cohort Hub</span>
+                  <ArrowRight className="w-3.5 h-3.5" />
+                </Link>
+              </CardFooter>
+            </Card>
+          ))}
+        </div>
+      )}
+
+      {/* Create / Edit Modal */}
+      <Modal
+        isOpen={isModalOpen}
+        onClose={handleCloseModal}
+        title={editingCohort ? `Edit Cohort: ${editingCohort.name}` : 'Create New Cohort'}
+        maxWidth="max-w-3xl"
+      >
+        <form onSubmit={handleSubmit} className="space-y-6">
+          {/* Section 1: Basic Information & Timeline */}
+          <div className="space-y-4">
+            <div className="flex items-center justify-between border-b border-slate-100 pb-2">
+              <span className="text-xs font-black uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
+                <Layers className="w-3.5 h-3.5 text-emerald-600" />
+                <span>1. Cohort Profile & Timeline</span>
+              </span>
+              {startDate && endDate && (
+                <span className="text-xs font-bold text-emerald-700 bg-emerald-50 px-2.5 py-0.5 rounded-full border border-emerald-100">
+                  {Math.max(1, Math.round((new Date(endDate) - new Date(startDate)) / (7 * 24 * 3600 * 1000)))} Weeks Duration
+                </span>
+              )}
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                Cohort Name <span className="text-rose-500">*</span>
+              </label>
+              <input
+                type="text"
+                value={name}
+                onChange={(e) => setName(e.target.value)}
+                placeholder="e.g. Fall 2026 Engineering Cohort"
+                required
+                className="w-full px-4 py-2.5 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500 text-sm"
+              />
+            </div>
+
+            <div>
+              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                Description
+              </label>
+              <textarea
+                rows={2}
+                value={description}
+                onChange={(e) => setDescription(e.target.value)}
+                placeholder="Cohort scope, objectives, target engineering squads..."
+                className="w-full px-4 py-2 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500 text-xs"
+              />
+            </div>
+
+            <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                  Start Date <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="date"
+                  value={startDate}
+                  onChange={(e) => setStartDate(e.target.value)}
+                  required
+                  className="w-full px-3 py-2 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500 text-xs font-semibold"
+                />
+              </div>
+              <div>
+                <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1.5">
+                  End Date <span className="text-rose-500">*</span>
+                </label>
+                <input
+                  type="date"
+                  value={endDate}
+                  onChange={(e) => setEndDate(e.target.value)}
+                  required
+                  className="w-full px-3 py-2 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500 text-xs font-semibold"
+                />
+              </div>
+            </div>
+
+
+          </div>
+
+          {/* Section 2: Training Plan Allocation (Editable) */}
+          {!editingCohort && (
+            <div className="space-y-4 pt-4 border-t border-slate-100">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-black uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
+                  <BookOpen className="w-3.5 h-3.5 text-blue-600" />
+                  <span>2. Training Plan Curriculum (Editable)</span>
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setIsCustomizingPlan(!isCustomizingPlan)}
+                  className={`text-xs font-bold px-2.5 py-1 rounded-lg border transition-colors ${
+                    isCustomizingPlan
+                      ? 'bg-blue-600 text-white border-blue-600'
+                      : 'bg-blue-50 text-blue-700 border-blue-200 hover:bg-blue-100'
+                  }`}
+                >
+                  {isCustomizingPlan ? 'Using Custom Curriculum' : 'Customize Curriculum'}
+                </button>
+              </div>
+
+              {!isCustomizingPlan ? (
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1.5">
+                    Select Base Training Template (Deep-Copied to this Cohort)
+                  </label>
+                  <select
+                    value={selectedTrainingTplId}
+                    onChange={(e) => handleSelectTrainingTemplate(e.target.value)}
+                    className="w-full px-3 py-2 text-xs font-semibold rounded-xl border border-slate-200 bg-white focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  >
+                    <option value="">-- Do Not Apply Plan Yet (Configure Later) --</option>
+                    {trainingTemplates?.map((t) => (
+                      <option key={t.id} value={t.id}>
+                        {t.name} ({t.totalWeeks} Weeks, {t.weeks?.reduce((acc, w) => acc + (w.courses?.length || 0), 0)} courses)
+                      </option>
+                    ))}
+                  </select>
+
+                  {customPlan.weeks?.length > 0 && (
+                    <div className="mt-2.5 p-3 rounded-xl bg-blue-50/50 border border-blue-100 text-xs text-blue-900 flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Check className="w-3.5 h-3.5 text-blue-600" />
+                        <span className="font-semibold">{customPlan.name}</span>
+                      </div>
+                      <span className="font-mono text-[11px] font-bold text-blue-700">
+                        {customPlan.totalWeeks} Weeks Allocated
+                      </span>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                /* Editable Custom Plan Builder */
+                <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-4">
+                  <div className="flex justify-between items-center">
+                    <div>
+                      <h4 className="text-xs font-bold text-slate-800">Customize Cohort Curriculum</h4>
+                      <p className="text-[11px] text-slate-500">Edit titles, add courses, or extend additional weeks</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleAddWeek}
+                      className="px-2.5 py-1 bg-blue-600 hover:bg-blue-700 text-white rounded-lg text-xs font-bold flex items-center gap-1 shadow-xs"
+                    >
+                      <Plus className="w-3 h-3" />
+                      <span>Add Week</span>
+                    </button>
+                  </div>
+
+                  <div className="max-h-64 overflow-y-auto space-y-3 pr-1">
+                    {customPlan.weeks?.map((week, wIdx) => (
+                      <div key={wIdx} className="p-3 bg-white rounded-xl border border-slate-200 space-y-2">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="text-xs font-black text-slate-800 bg-slate-100 px-2 py-0.5 rounded">
+                            Week {week.weekNumber}
+                          </span>
+                          <input
+                            type="text"
+                            value={week.title}
+                            onChange={(e) => {
+                              const newWeeks = [...customPlan.weeks];
+                              newWeeks[wIdx].title = e.target.value;
+                              setCustomPlan({ ...customPlan, weeks: newWeeks });
+                            }}
+                            className="flex-1 px-2.5 py-1 text-xs font-bold rounded-lg border border-slate-200 focus:ring-1 focus:ring-blue-500"
+                            placeholder="Week title..."
+                          />
+                          <button
+                            type="button"
+                            onClick={() => handleRemoveWeek(wIdx)}
+                            className="p-1 text-slate-400 hover:text-rose-600 transition-colors"
+                            title="Remove week"
+                          >
+                            <Trash2 className="w-3.5 h-3.5" />
+                          </button>
+                        </div>
+
+                        {/* Courses list */}
+                        <div className="space-y-1.5 pl-2">
+                          {week.courses?.map((c, cIdx) => (
+                            <div key={cIdx} className="flex items-center gap-2 text-xs">
+                              <span className="text-slate-400 text-[11px]">&bull;</span>
+                              <input
+                                type="text"
+                                value={c.title}
+                                onChange={(e) => handleUpdateCourseInWeek(wIdx, cIdx, 'title', e.target.value)}
+                                placeholder="Module title..."
+                                className="flex-1 px-2 py-0.5 text-xs rounded border border-slate-200 focus:ring-1 focus:ring-blue-500"
+                              />
+                              <div className="flex items-center gap-1 w-20">
+                                <input
+                                  type="number"
+                                  step="0.5"
+                                  min="0.5"
+                                  value={c.durationHrs}
+                                  onChange={(e) => handleUpdateCourseInWeek(wIdx, cIdx, 'durationHrs', parseFloat(e.target.value) || 1)}
+                                  className="w-14 px-1.5 py-0.5 text-xs rounded border border-slate-200 text-right"
+                                />
+                                <span className="text-[10px] text-slate-400">h</span>
+                              </div>
+                              <button
+                                type="button"
+                                onClick={() => handleRemoveCourseFromWeek(wIdx, cIdx)}
+                                className="p-0.5 text-slate-300 hover:text-rose-500"
+                              >
+                                &times;
+                              </button>
+                            </div>
+                          ))}
+                          <button
+                            type="button"
+                            onClick={() => handleAddCourseToWeek(wIdx)}
+                            className="text-[11px] font-bold text-blue-600 hover:underline flex items-center gap-1 pt-1"
+                          >
+                            <Plus className="w-3 h-3" />
+                            <span>Add Course to Week {week.weekNumber}</span>
+                          </button>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          {/* Section 3: Feedback Form Allocation (Editable) */}
+          {!editingCohort && (
+            <div className="space-y-4 pt-4 border-t border-slate-100">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-black uppercase tracking-wider text-slate-700 flex items-center gap-1.5">
+                  <MessageSquare className="w-3.5 h-3.5 text-purple-600" />
+                  <span>3. Weekly Feedback Form (Editable)</span>
+                </span>
+                <button
+                  type="button"
+                  onClick={() => setIsCustomizingForm(!isCustomizingForm)}
+                  className={`text-xs font-bold px-2.5 py-1 rounded-lg border transition-colors ${
+                    isCustomizingForm
+                      ? 'bg-purple-600 text-white border-purple-600'
+                      : 'bg-purple-50 text-purple-700 border-purple-200 hover:bg-purple-100'
+                  }`}
+                >
+                  {isCustomizingForm ? 'Using Custom Form' : 'Customize Questions'}
+                </button>
+              </div>
+
+              {!isCustomizingForm ? (
+                <div>
+                  <label className="block text-xs font-semibold text-slate-600 mb-1.5">
+                    Select Base Feedback Form Template
+                  </label>
+                  <select
+                    value={selectedFeedbackTplId}
+                    onChange={(e) => handleSelectFeedbackTemplate(e.target.value)}
+                    className="w-full px-3 py-2 text-xs font-semibold rounded-xl border border-slate-200 bg-white focus:outline-none focus:ring-2 focus:ring-purple-500"
+                  >
+                    <option value="">-- Do Not Apply Form Yet (Configure Later) --</option>
+                    {feedbackTemplates?.map((f) => (
+                      <option key={f.id} value={f.id}>
+                        {f.name} ({f.fields?.length || 0} questions)
+                      </option>
+                    ))}
+                  </select>
+
+                  {customForm.fields?.length > 0 && (
+                    <div className="mt-2.5 p-3 rounded-xl bg-purple-50/50 border border-purple-100 text-xs text-purple-900 flex items-center justify-between">
+                      <div className="flex items-center gap-2">
+                        <Check className="w-3.5 h-3.5 text-purple-600" />
+                        <span className="font-semibold">{customForm.name}</span>
+                      </div>
+                      <span className="font-mono text-[11px] font-bold text-purple-700">
+                        {customForm.fields.length} Evaluation Fields
+                      </span>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                /* Editable Custom Feedback Form Builder */
+                <div className="p-4 rounded-xl bg-slate-50 border border-slate-200 space-y-4">
+                  <div className="flex justify-between items-center">
+                    <div>
+                      <h4 className="text-xs font-bold text-slate-800">Customize Evaluation Questions</h4>
+                      <p className="text-[11px] text-slate-500">Add rating questions, text areas, or select dropdowns</p>
+                    </div>
+                    <button
+                      type="button"
+                      onClick={handleAddField}
+                      className="px-2.5 py-1 bg-purple-600 hover:bg-purple-700 text-white rounded-lg text-xs font-bold flex items-center gap-1 shadow-xs"
+                    >
+                      <Plus className="w-3 h-3" />
+                      <span>Add Question</span>
+                    </button>
+                  </div>
+
+                  <div className="max-h-60 overflow-y-auto space-y-2 pr-1">
+                    {customForm.fields?.map((field, fIdx) => (
+                      <div key={fIdx} className="p-2.5 bg-white rounded-xl border border-slate-200 flex items-center gap-2 text-xs">
+                        <input
+                          type="text"
+                          value={field.label}
+                          onChange={(e) => handleUpdateField(fIdx, 'label', e.target.value)}
+                          placeholder="Question / metric label..."
+                          className="flex-1 px-2.5 py-1 text-xs rounded border border-slate-200 focus:ring-1 focus:ring-purple-500 font-semibold"
+                        />
+                        <select
+                          value={field.type}
+                          onChange={(e) => handleUpdateField(fIdx, 'type', e.target.value)}
+                          className="px-2 py-1 text-xs rounded border border-slate-200 bg-white"
+                        >
+                          <option value="rating">Rating (1-5)</option>
+                          <option value="text">Text Response</option>
+                          <option value="select">Multiple Choice</option>
+                        </select>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveField(fIdx)}
+                          className="p-1 text-slate-300 hover:text-rose-600 transition-colors"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              )}
+            </div>
+          )}
+
+          <div className="pt-4 border-t border-slate-100 flex justify-end gap-3">
+            <button
+              type="button"
+              onClick={handleCloseModal}
+              className="px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl"
+            >
+              Cancel
+            </button>
+            <button
+              type="submit"
+              disabled={saveMutation.isPending}
+              className="px-5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl shadow-sm disabled:opacity-50 flex items-center gap-1.5"
+            >
+              <Sparkles className="w-3.5 h-3.5" />
+              <span>{saveMutation.isPending ? 'Saving...' : editingCohort ? 'Update & Extend Cohort' : 'Create & Launch Cohort'}</span>
+            </button>
+          </div>
+        </form>
+      </Modal>
+    </div>
+  );
+}
