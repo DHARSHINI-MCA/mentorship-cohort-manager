@@ -54,6 +54,15 @@ async def update_cohort(
 ):
     return await CohortService.update_cohort(db, cohort_id, data)
 
+@router.delete("/{cohort_id}")
+async def delete_cohort(
+    cohort_id: str,
+    db: AsyncIOMotorDatabase = Depends(get_database),
+    current_user: dict = Depends(require_admin)
+):
+    await CohortService.delete_cohort(db, cohort_id)
+    return {"success": True, "message": "Cohort and its cohort-specific records deleted"}
+
 @router.patch("/{cohort_id}/status", response_model=CohortResponse)
 async def update_cohort_status(
     cohort_id: str,

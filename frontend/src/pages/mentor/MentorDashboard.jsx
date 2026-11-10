@@ -3,208 +3,146 @@ import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import api from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
-import { Card, CardBody, CardFooter } from '../../components/Card';
-import { Badge } from '../../components/Badge';
-import { ProgressBar } from '../../components/ProgressBar';
-import { SkeletonCard } from '../../components/SkeletonCard';
 import { EmptyState } from '../../components/EmptyState';
-import { Users, BookOpen, TrendingUp, ArrowRight, MessageSquare, ExternalLink, ClipboardList, CheckCircle2 } from 'lucide-react';
+import { Users } from 'lucide-react';
+
+const dateLabel = (value) => value ? new Date(value).toLocaleDateString() : '—';
 
 export function MentorDashboard() {
   const { user } = useAuth();
-
   const { data: dashboardData, isLoading } = useQuery({
     queryKey: ['mentorDashboard'],
-    queryFn: async () => {
-      const res = await api.get('/mentor/dashboard');
-      return res.data;
-    },
+    queryFn: async () => (await api.get('/mentor/dashboard')).data,
   });
-
   const { data: cohortPlan } = useQuery({
     queryKey: ['mentorCohortPlan'],
     queryFn: async () => {
-      try {
-        const res = await api.get('/mentor/cohort-plan');
-        return res.data;
-      } catch (err) {
-        return null;
-      }
+      try { return (await api.get('/mentor/cohort-plan')).data; }
+      catch { return null; }
     },
   });
 
+  const trainees = dashboardData?.trainees || [];
+  const activeCount = dashboardData?.activeTrainees ?? dashboardData?.totalTrainees ?? 0;
+  const droppedCount = dashboardData?.droppedOutTrainees || 0;
+  const averageProgress = dashboardData?.avgProgress || 0;
+
   return (
-    <div className="space-y-8">
-      {/* Header & Stats Banner */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+    <main className="mx-auto max-w-7xl px-4 py-4 sm:px-6 lg:px-8">
+
+      {/* ── Slim page header ── */}
+      <div className="flex items-center justify-between py-2 border-b border-slate-200 mb-0">
         <div>
-          <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight">
-            Mentor Workspace
-          </h1>
-          <p className="text-sm text-slate-500 mt-1">
-            Welcome, {dashboardData?.mentorName || user?.name}. Manage your mentees, track completion, and submit cohort evaluations.
-          </p>
+          <span className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Mentor workspace</span>
+          <h1 className="text-sm font-bold text-slate-900 mt-0.5">{dashboardData?.mentorName || user?.name}</h1>
         </div>
-        {cohortPlan && (
-          <Link
-            to="/mentor/plan"
-            className="px-4 py-2.5 bg-slate-800 hover:bg-slate-900 text-white rounded-xl text-xs font-bold flex items-center gap-2 shadow-sm transition-all shrink-0"
-          >
-            <BookOpen className="w-4 h-4 text-emerald-400" />
-            <span>View Allocated Training Plan</span>
-          </Link>
-        )}
+        <div className="flex items-center gap-4">
+          {/* Quick nav links */}
+          <Link to="/mentor/batches" className="text-xs font-semibold text-emerald-700 hover:underline">Batches</Link>
+          <Link to="/mentor/sessions" className="text-xs font-semibold text-emerald-700 hover:underline">Sessions</Link>
+          {cohortPlan && (
+            <Link to="/mentor/plan" className="text-xs font-semibold text-slate-500 hover:text-slate-900">
+              {cohortPlan.name} <span className="font-normal text-slate-400">· {cohortPlan.totalWeeks || 4}w</span>
+            </Link>
+          )}
+        </div>
       </div>
 
-      {/* 3 Metrics Cards */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-5">
-        {/* Metric 1: Trainees under mentor */}
-        <Card className="border-blue-100">
-          <CardBody className="p-6">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Active Trainees</span>
-              <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-600 flex items-center justify-center">
-                <Users className="w-5 h-5" />
-              </div>
-            </div>
-            <div className="mt-4 flex items-baseline gap-2">
-              <span className="text-3xl font-extrabold text-slate-800">{dashboardData?.activeTrainees ?? dashboardData?.totalTrainees ?? 0}</span>
-              <span className="text-xs font-semibold text-blue-600">{dashboardData?.droppedOutTrainees || 0} dropped out</span>
-            </div>
-          </CardBody>
-        </Card>
-
-        {/* Metric 2: Allocated Training Plan */}
-        <Card className="border-emerald-100">
-          <CardBody className="p-6">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Allocated Training Plan</span>
-              <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-600 flex items-center justify-center">
-                <BookOpen className="w-5 h-5" />
-              </div>
-            </div>
-            <div className="mt-4">
-              <div className="text-sm font-bold text-slate-800 line-clamp-1">
-                {cohortPlan?.name || 'Curriculum Track'}
-              </div>
-              <div className="flex items-center justify-between mt-1 text-xs text-emerald-600 font-semibold">
-                <span>{cohortPlan?.totalWeeks || 4} Weeks Allocated</span>
-                <Link to="/mentor/plan" className="hover:underline flex items-center gap-0.5 text-[11px]">
-                  <span>Details</span>
-                  <ExternalLink className="w-3 h-3" />
-                </Link>
-              </div>
-            </div>
-          </CardBody>
-        </Card>
-
-        {/* Metric 3: Average Completion */}
-        <Card className="border-purple-100">
-          <CardBody className="p-6">
-            <div className="flex items-center justify-between">
-              <span className="text-xs font-bold uppercase tracking-wider text-slate-400">Cohort Track Progress</span>
-              <div className="w-10 h-10 rounded-xl bg-purple-50 text-purple-600 flex items-center justify-center">
-                <TrendingUp className="w-5 h-5" />
-              </div>
-            </div>
-            <div className="mt-4 flex items-baseline gap-2">
-              <span className="text-3xl font-extrabold text-slate-800">{dashboardData?.avgProgress || 0}%</span>
-              <span className="text-xs font-semibold text-purple-600">Average Completion</span>
-            </div>
-          </CardBody>
-        </Card>
+      {/* ── Stats strip ── */}
+      <div className="flex gap-6 text-sm py-2.5 border-b border-slate-100 flex-wrap">
+        <div>
+          <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 mr-1.5">Active trainees</span>
+          <span className="font-bold text-slate-900">{activeCount}</span>
+        </div>
+        <div>
+          <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 mr-1.5">Dropped out</span>
+          <span className="font-bold text-rose-700">{droppedCount}</span>
+        </div>
+        <div>
+          <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 mr-1.5">Avg progress</span>
+          <span className="font-bold text-slate-900">{averageProgress}%</span>
+        </div>
+        <div>
+          <span className="text-[11px] font-semibold uppercase tracking-wider text-slate-400 mr-1.5">Feedback submitted</span>
+          <span className="font-bold text-slate-900">{trainees.reduce((sum, trainee) => sum + (trainee.feedbackCount || 0), 0)}</span>
+        </div>
+        <div className="ml-auto text-[11px] text-slate-400">{trainees.length} total trainees</div>
       </div>
 
-      {/* Trainees Cards Grid */}
-      <div className="space-y-4">
-        <div className="flex items-center justify-between">
-          <h2 className="text-lg font-bold text-slate-800">
-            Assigned Trainees ({dashboardData?.totalTrainees || 0})
-          </h2>
-          <span className="text-xs text-slate-500">
-            Click on any trainee to check courses and submit weekly feedback
-          </span>
+      {/* ── Trainees table ── */}
+      <section>
+        <div className="flex items-center justify-between py-2 border-b border-slate-200 mb-0">
+          <span className="text-xs font-bold uppercase tracking-wider text-slate-500">Trainees</span>
         </div>
 
         {isLoading ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            <SkeletonCard count={3} />
+          <div className="divide-y divide-slate-100 border-b border-slate-200">
+            {[1, 2, 3].map((row) => <div key={row} className="h-10 animate-pulse bg-slate-50" />)}
           </div>
-        ) : dashboardData?.trainees?.length === 0 ? (
-          <EmptyState
-            icon={Users}
-            title="No trainees currently assigned"
-            description="You don't have any trainees assigned to your profile in active cohorts yet."
-          />
+        ) : trainees.length === 0 ? (
+          <EmptyState icon={Users} title="No trainees currently assigned" description="Trainees assigned to you will appear here." />
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {dashboardData?.trainees?.map((t) => (
-              <Card key={t.traineeId} hover className="flex flex-col justify-between">
-                <CardBody className="p-6">
-                  <div className="flex justify-between items-start gap-2 mb-2">
-                    <div>
-                      <div className="flex items-center gap-2"><h3 className="font-bold text-slate-800 text-base">{t.name}</h3>{t.status === 'dropped_out' && <Badge variant="danger">Dropped Out</Badge>}</div>
-                      <p className="text-xs text-slate-500">{t.email}</p>
-                    </div>
-                    <span className="font-mono text-[11px] font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded">
-                      {t.employeeId}
-                    </span>
-                  </div>
-
-                  <div className="text-xs text-slate-600 font-medium mb-4 flex items-center gap-1.5">
-                    <span className="px-2 py-0.5 rounded bg-blue-50 text-blue-700 font-semibold">{t.department}</span>
-                    <span className="text-slate-400">&bull;</span>
-                    <span className="text-slate-500">{t.cohortName}</span>
-                  </div>
-
-                  <div className="space-y-3 pt-3 border-t border-slate-100">
-                    <div className="space-y-1">
-                      <div className="flex justify-between items-center text-xs">
-                        <span className="font-semibold text-slate-600">Curriculum</span>
-                        <span className="font-bold text-slate-800">{t.percentComplete}%</span>
-                      </div>
-                      <ProgressBar percent={t.percentComplete} size="sm" showLabel={false} />
-                    </div>
-
-                    <div className="flex items-center justify-between text-xs pt-1.5 border-t border-slate-100">
-                      <span className="flex items-center gap-1.5 text-slate-600 font-medium">
-                        <ClipboardList className="w-3.5 h-3.5 text-purple-600" />
-                        <span>Weekly Feedback</span>
-                      </span>
-                      <span className="font-bold text-purple-700 bg-purple-50 px-2 py-0.5 rounded-full text-[11px] border border-purple-100">
-                        {t.feedbackCount || 0} / {t.totalWeeks || 4} Weeks Done
-                      </span>
-                    </div>
-
-                    {t.lastFeedbackDate ? (
-                      <p className="text-[11px] text-slate-400">
-                        Latest: Week {t.lastFeedbackWeek} on {new Date(t.lastFeedbackDate).toLocaleDateString()}
-                      </p>
-                    ) : (
-                      <p className="text-[11px] text-amber-600 font-medium flex items-center gap-1">
-                        <span>●</span> Week 1 evaluation pending
-                      </p>
-                    )}
-                  </div>
-                </CardBody>
-
-                <CardFooter className="bg-slate-50/50">
-                  <span className="text-xs font-semibold text-slate-500">
-                    {t.status === 'dropped_out' ? 'Dropped Out' : t.percentComplete >= 100 ? 'Completed Track' : 'In Progress'}
-                  </span>
-                  <Link
-                    to={`/mentor/trainees/${t.traineeId}`}
-                    className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold flex items-center gap-1 shadow-xs transition-all"
-                  >
-                    <span>{t.status === 'dropped_out' ? 'View Details' : 'Review Feedback'}</span>
-                    <ArrowRight className="w-3.5 h-3.5" />
-                  </Link>
-                </CardFooter>
-              </Card>
-            ))}
+          <div className="overflow-x-auto border-b border-slate-200">
+            <table className="w-full min-w-[900px] text-left text-sm">
+              <thead className="bg-slate-50 text-[11px] font-semibold uppercase tracking-wide text-slate-500">
+                <tr>
+                  <th className="px-4 py-2">Trainee</th>
+                  <th className="px-4 py-2">Location</th>
+                  <th className="px-4 py-2">Progress</th>
+                  <th className="px-4 py-2">Feedback</th>
+                  <th className="px-4 py-2">Last review</th>
+                  <th className="px-4 py-2">Status</th>
+                  <th className="px-4 py-2"><span className="sr-only">Open</span></th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-100">
+                {trainees.map((trainee) => {
+                  const dropped = trainee.status === 'dropped_out';
+                  const percent = Math.max(0, Math.min(100, Number(trainee.percentComplete) || 0));
+                  return (
+                    <tr key={trainee.traineeId} className="hover:bg-slate-50/70">
+                      <td className="px-4 py-2">
+                        <Link to={`/mentor/trainees/${trainee.traineeId}`} className="font-semibold text-slate-900 hover:text-emerald-700">{trainee.name}</Link>
+                        <p className="mt-0.5 text-[11px] text-slate-400">{trainee.employeeId || '—'} · {trainee.email}</p>
+                      </td>
+                      <td className="px-4 py-2 text-slate-700">
+                        <span>{trainee.location || 'Not provided'}</span>
+                        <p className="mt-0.5 text-[11px] text-slate-400">{trainee.timezone || trainee.cohortName || '—'}</p>
+                      </td>
+                      <td className="px-4 py-2">
+                        <div className="flex items-center gap-2">
+                          <div className="h-1 w-16 bg-slate-200 rounded">
+                            <div className="h-full bg-emerald-500 rounded" style={{ width: `${percent}%` }} />
+                          </div>
+                          <span className="tabular-nums text-slate-700 text-xs">{percent}%</span>
+                        </div>
+                      </td>
+                      <td className="px-4 py-2 tabular-nums text-slate-600 text-xs">{trainee.feedbackCount || 0} / {trainee.totalWeeks || 4}</td>
+                      <td className="px-4 py-2 text-slate-500 text-xs">
+                        {trainee.lastFeedbackDate ? `Week ${trainee.lastFeedbackWeek || '—'} · ${dateLabel(trainee.lastFeedbackDate)}` : <span className="text-amber-700">Pending</span>}
+                      </td>
+                      <td className="px-4 py-2">
+                        <span className={`text-[11px] font-semibold uppercase px-1.5 py-0.5 rounded ${
+                          dropped ? 'bg-rose-50 text-rose-700' :
+                          percent >= 100 ? 'bg-emerald-50 text-emerald-700' :
+                          'bg-slate-100 text-slate-600'
+                        }`}>
+                          {dropped ? 'Dropped' : percent >= 100 ? 'Done' : 'Active'}
+                        </span>
+                      </td>
+                      <td className="px-4 py-2 text-right">
+                        <Link to={`/mentor/trainees/${trainee.traineeId}`} className="text-xs font-semibold text-emerald-700 hover:underline">
+                          {dropped ? 'Record' : 'Review'} →
+                        </Link>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
           </div>
         )}
-      </div>
-    </div>
+      </section>
+    </main>
   );
 }

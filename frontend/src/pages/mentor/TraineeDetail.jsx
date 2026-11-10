@@ -11,7 +11,7 @@ import { SkeletonCard } from '../../components/SkeletonCard';
 import { EmptyState } from '../../components/EmptyState';
 import { 
   ArrowLeft, CheckCircle2, Circle, Clock, MessageSquare, 
-  Send, Calendar, Star, FileText, Check, ChevronRight, ChevronLeft, CheckCheck,
+  Send, Calendar, Star, Check, ChevronRight, CheckCheck,
   ClipboardList, AlertCircle, Sparkles, Award, ArrowRight, UserX
 } from 'lucide-react';
 
@@ -31,8 +31,7 @@ export function TraineeDetail() {
 
   const [selectedWeek, setSelectedWeek] = useState(1);
   const [answers, setAnswers] = useState({});
-  const [expandedWeeks, setExpandedWeeks] = useState({}); // Track which weeks are expanded in history
-  const [expandedTalentNext, setExpandedTalentNext] = useState(false); // Track if TalentNext section is expanded
+  const [expandedTalentNext, setExpandedTalentNext] = useState(true);
 
   // 1. Fetch Trainee Details (includes trainee, cohort, plan, progress, feedbackForm, feedbackHistory)
   const { data, isLoading, isError, error } = useQuery({
@@ -264,8 +263,8 @@ export function TraineeDetail() {
           <span>Back to My Trainees</span>
         </Link>
 
-        <Card className="border-emerald-100 bg-gradient-to-r from-white via-white to-emerald-50/20 shadow-soft">
-          <CardBody className="p-6 sm:p-8">
+        <Card className="rounded-none border-x-0 border-t-0 border-b border-slate-200 bg-transparent shadow-none">
+          <CardBody className="p-0 pb-5">
             <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-6">
               <div>
                 <div className="flex items-center gap-3 mb-1.5">
@@ -290,9 +289,9 @@ export function TraineeDetail() {
               </div>
 
               {/* Dual Progress Summary Cards: Curriculum & Weekly Feedback */}
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 lg:w-[480px]">
+              <div className="flex flex-wrap gap-x-6 gap-y-2 lg:w-[480px]">
                 {/* Metric 1: Curriculum */}
-                <div className="bg-white p-4 rounded-2xl border border-slate-200/80 shadow-xs">
+                <div className="min-w-[150px] flex-1 border-l-2 border-emerald-500 pl-3 py-1">
                   <div className="flex justify-between items-center mb-1">
                     <span className="text-xs font-bold text-slate-600 flex items-center gap-1">
                       <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
@@ -302,14 +301,13 @@ export function TraineeDetail() {
                       {progress?.percentComplete || 0}%
                     </span>
                   </div>
-                  <ProgressBar percent={progress?.percentComplete || 0} size="sm" showLabel={false} />
-                  <p className="text-[11px] text-slate-400 mt-2 text-right">
+                  <p className="text-[11px] text-slate-400 mt-1">
                     {progress?.items?.filter((i) => i.completed).length || 0} of {progress?.items?.length || 0} courses
                   </p>
                 </div>
 
                 {/* Metric 2: Weekly Feedback Form */}
-                <div className="bg-white p-4 rounded-2xl border border-purple-200/80 shadow-xs">
+                <div className="min-w-[150px] flex-1 border-l-2 border-purple-500 pl-3 py-1">
                   <div className="flex justify-between items-center mb-1">
                     <span className="text-xs font-bold text-purple-900 flex items-center gap-1">
                       <ClipboardList className="w-3.5 h-3.5 text-purple-600" />
@@ -319,8 +317,7 @@ export function TraineeDetail() {
                       {feedbackPercent}%
                     </span>
                   </div>
-                  <ProgressBar percent={feedbackPercent} size="sm" showLabel={false} />
-                  <p className="text-[11px] text-slate-400 mt-2 text-right">
+                  <p className="text-[11px] text-slate-400 mt-1">
                     {feedbackHistory.length} of {totalWeeksCount} weeks reviewed
                   </p>
                 </div>
@@ -364,8 +361,8 @@ export function TraineeDetail() {
 
       {/* TalentNext Courses Section */}
       {talentnextCourses.length > 0 && (
-        <Card className="border-blue-200 bg-gradient-to-r from-blue-50/30 to-white shadow-soft">
-          <CardHeader className="py-4 px-6 bg-gradient-to-r from-blue-50 to-white border-b border-blue-100">
+        <Card className="rounded-none border-x-0 border-t-0 border-b border-slate-200 bg-transparent shadow-none">
+          <CardHeader className="px-0 py-3 bg-transparent border-b border-slate-200">
             <div className="flex items-center justify-between">
               <div className="flex items-center gap-3">
                 <button
@@ -394,7 +391,7 @@ export function TraineeDetail() {
           </CardHeader>
 
           {expandedTalentNext && (
-            <CardBody className="p-4 space-y-2.5">
+            <CardBody className="px-0 py-2 space-y-0">
               {talentnextCourses.length === 0 ? (
                 <div className="p-4 text-center text-slate-500 text-xs italic">
                   No TalentNext courses assigned to this cohort.
@@ -409,7 +406,7 @@ export function TraineeDetail() {
                     <div
                       key={course.id}
                       onClick={() => handleToggleTalentNextCourse(course.id)}
-                      className={`p-3.5 rounded-xl border transition-all cursor-pointer flex items-start gap-3 ${
+                      className={`border-b border-slate-200 py-2.5 transition-all cursor-pointer flex items-center gap-3 ${
                         isCompleted
                           ? 'bg-blue-50/60 border-blue-200 text-blue-950'
                           : 'bg-white border-slate-200/80 hover:border-slate-300 text-slate-800'
@@ -448,10 +445,10 @@ export function TraineeDetail() {
       )}
 
       {/* Main Grid: Plan Checklist & Feedback Section */}
-      <div className="grid grid-cols-1 lg:grid-cols-12 gap-8">
+      <div className="grid grid-cols-1 items-start gap-6 xl:grid-cols-2">
         
         {/* Left Column: Weekly Courses Checklist (7 cols) */}
-        <div className="lg:col-span-7 space-y-6">
+        <section className="space-y-3">
           <div className="flex items-center justify-between">
             <div>
               <h2 className="text-lg font-bold text-slate-900">Training Plan Checklist</h2>
@@ -468,7 +465,7 @@ export function TraineeDetail() {
               description="A training plan has not yet been applied to this cohort."
             />
           ) : (
-            <div className="space-y-5">
+            <div className="divide-y divide-slate-200 border-y border-slate-200">
               {plan.weeks?.map((week) => {
                 const weekCourses = week.courses || [];
                 const isBufferOnly = (week.isBuffer || weekCourses.length === 0) && weekCourses.length === 0;
@@ -478,9 +475,9 @@ export function TraineeDetail() {
 
                 if (isBufferOnly) {
                   return (
-                    <Card key={week.weekNumber} className="border-amber-200 bg-amber-50/20">
-                      <CardHeader className="py-3 px-5 bg-amber-50/50">
-                        <div className="flex items-center gap-3">
+                    <Card key={week.weekNumber} className="rounded-none border-x-0 border-t-0 border-b border-amber-200 bg-amber-50/30 shadow-none">
+                      <CardHeader className="flex-wrap gap-3 border-b-0 bg-transparent px-2 py-2.5">
+                        <div className="flex min-w-0 items-center gap-3 text-left">
                           <span className="w-8 h-8 rounded-xl bg-amber-500 text-white text-xs font-black flex items-center justify-center shrink-0">
                             W{week.weekNumber}
                           </span>
@@ -522,8 +519,8 @@ export function TraineeDetail() {
                         </button>
                       </CardHeader>
 
-                      <CardBody className="p-3.5">
-                        <div className="p-3 rounded-xl bg-white border border-amber-200/80 text-xs text-slate-600 flex items-center justify-between">
+                      <CardBody className="px-2 pb-3 pt-0">
+                        <div className="text-xs text-slate-600">
                           <span className="leading-relaxed">
                             <strong>Buffer Period:</strong> No course modules assigned. Mentee uses this time to catch up on curriculum, complete practical assessments, and receive mentor feedback.
                           </span>
@@ -534,9 +531,9 @@ export function TraineeDetail() {
                 }
 
                 return (
-                  <Card key={week.weekNumber} className={allWeekComplete ? 'border-emerald-200 bg-emerald-50/10' : ''}>
-                    <CardHeader className="py-3.5 px-5">
-                      <div className="flex items-center gap-3">
+                  <Card key={week.weekNumber} className={`rounded-none border-x-0 border-t-0 border-b border-slate-200 shadow-none ${allWeekComplete ? 'bg-emerald-50/30' : ''}`}>
+                    <CardHeader className="flex-wrap gap-3 border-b-0 px-2 py-2.5">
+                      <div className="flex min-w-0 items-center gap-3 text-left">
                         <span className={`w-8 h-8 rounded-xl flex items-center justify-center text-xs font-black shrink-0 ${
                           allWeekComplete ? 'bg-emerald-600 text-white' : 'bg-slate-100 text-slate-700'
                         }`}>
@@ -591,7 +588,7 @@ export function TraineeDetail() {
                       </div>
                     </CardHeader>
 
-                    <CardBody className="p-4 space-y-2">
+                    <CardBody className="divide-y divide-slate-100 border-t border-slate-100 px-2 py-1">
                       {weekCourses.map((course) => {
                         const isCompleted = !!progressMap[course.courseId];
 
@@ -599,7 +596,7 @@ export function TraineeDetail() {
                           <div
                             key={course.courseId}
                             onClick={() => handleToggleCourse(course.courseId, isCompleted)}
-                            className={`p-3.5 rounded-xl border transition-all cursor-pointer flex items-start gap-3 ${
+                            className={`flex cursor-pointer items-center gap-3 border-b border-slate-100 px-1 py-2.5 transition-all ${
                               isCompleted
                                 ? 'bg-emerald-50/60 border-emerald-200 text-emerald-950'
                                 : 'bg-white border-slate-200/80 hover:border-slate-300 text-slate-800'
@@ -640,12 +637,12 @@ export function TraineeDetail() {
               })}
             </div>
           )}
-        </div>
+        </section>
 
-        {/* Right Column: Weekly Feedback Form (Configured to the Cohort) (5 cols) */}
-        <div className="lg:col-span-5 space-y-6" id="feedback-section">
-          <Card className="border-purple-200 shadow-soft">
-            <CardHeader className="bg-gradient-to-r from-purple-50/80 to-white border-b border-purple-100">
+        {/* Weekly feedback form and review history */}
+        <section className="space-y-3 border-t border-slate-200 pt-5 xl:border-l xl:border-t-0 xl:pl-5 xl:pt-0" id="feedback-section">
+          <Card className="rounded-none border-0 border-b border-slate-200 shadow-none">
+            <CardHeader className="bg-transparent px-0 py-3">
               <div className="flex items-center justify-between w-full">
                 <div>
                   <div className="flex items-center gap-2">
@@ -661,76 +658,33 @@ export function TraineeDetail() {
               </div>
             </CardHeader>
 
-            <CardBody className="p-5 space-y-5">
-              {/* Stepper Header: Quick Week Switcher */}
+            <CardBody className="space-y-4 px-0 py-3">
+              {/* Week buttons select which feedback form is shown below. */}
               <div className="space-y-2.5">
-                <div className="flex items-center justify-between">
-                  <span className="text-xs font-bold text-slate-700 uppercase tracking-wider">
-                    Select Week ({selectedWeek} of {totalWeeksCount})
-                  </span>
-                  
-                  {/* Next / Prev Stepper */}
-                  <div className="flex items-center gap-1.5">
-                    <button
-                      type="button"
-                      disabled={selectedWeek <= 1}
-                      onClick={() => setSelectedWeek((w) => Math.max(1, w - 1))}
-                      className="p-1 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-lg border border-slate-200 disabled:opacity-30 disabled:pointer-events-none transition-colors"
-                      title="Previous Week"
-                    >
-                      <ChevronLeft className="w-4 h-4" />
-                    </button>
-                    <span className="text-xs font-bold text-purple-700 bg-purple-50 px-2 py-0.5 rounded-lg border border-purple-200 font-mono">
-                      Week {selectedWeek}
-                    </span>
-                    <button
-                      type="button"
-                      disabled={selectedWeek >= totalWeeksCount}
-                      onClick={() => setSelectedWeek((w) => Math.min(totalWeeksCount, w + 1))}
-                      className="p-1 text-slate-500 hover:text-slate-800 hover:bg-slate-100 rounded-lg border border-slate-200 disabled:opacity-30 disabled:pointer-events-none transition-colors"
-                      title="Next Week"
-                    >
-                      <ChevronRight className="w-4 h-4" />
-                    </button>
-                  </div>
+                <div className="flex items-center justify-between gap-3">
+                  <span className="text-xs font-bold uppercase tracking-wider text-slate-700">Select week</span>
+                  <span className="text-[11px] text-slate-500">{feedbackHistory.length} of {totalWeeksCount} submitted</span>
                 </div>
 
-                {/* Week Grid Chips: Clean & Responsive */}
-                <div className="grid grid-cols-4 sm:grid-cols-6 lg:grid-cols-4 gap-1.5">
+                <div className="flex flex-wrap gap-2 border-y border-slate-200 py-3">
                   {weeksList.map((wNum) => {
                     const isSubmitted = !!submittedWeeksMap[wNum];
                     const isSelected = selectedWeek === wNum;
-                    const weekObj = plan?.weeks?.find((w) => w.weekNumber === wNum);
-                    const isBuffer = weekObj?.isBuffer || !weekObj?.courses || weekObj.courses.length === 0;
-
                     return (
                       <button
                         key={wNum}
                         type="button"
+                        aria-pressed={isSelected}
                         onClick={() => setSelectedWeek(wNum)}
-                        className={`p-2 rounded-xl border text-center transition-all flex flex-col items-center gap-0.5 ${
+                        className={`rounded-lg border px-3 py-2 text-xs font-semibold transition-colors ${
                           isSelected
-                            ? 'border-purple-600 bg-purple-600 text-white shadow-xs ring-2 ring-purple-500/20'
+                            ? 'border-indigo-600 bg-indigo-600 text-white'
                             : isSubmitted
-                            ? 'border-emerald-200 bg-emerald-50/70 text-emerald-800 hover:bg-emerald-100/70'
-                            : isBuffer
-                            ? 'border-amber-200 bg-amber-50/60 text-amber-900 hover:bg-amber-100/60'
-                            : 'border-slate-200 bg-white text-slate-600 hover:bg-slate-50'
+                              ? 'border-emerald-200 bg-emerald-50 text-emerald-800 hover:bg-emerald-100'
+                              : 'border-slate-200 bg-white text-slate-700 hover:border-indigo-300 hover:bg-indigo-50'
                         }`}
                       >
-                        <span className="text-xs font-black">
-                          W{wNum} {isBuffer && <span className="text-[9px] font-normal opacity-75">(Buf)</span>}
-                        </span>
-                        {isSubmitted ? (
-                          <span className={`text-[10px] font-bold flex items-center gap-0.5 ${isSelected ? 'text-purple-100' : 'text-emerald-700'}`}>
-                            <Check className="w-2.5 h-2.5" />
-                            <span>Done</span>
-                          </span>
-                        ) : (
-                          <span className={`text-[10px] ${isSelected ? 'text-purple-200' : isBuffer ? 'text-amber-700 font-semibold' : 'text-slate-400'}`}>
-                            Pending
-                          </span>
-                        )}
+                        Week {wNum}{isSubmitted ? ' ✓' : ''}
                       </button>
                     );
                   })}
@@ -888,87 +842,7 @@ export function TraineeDetail() {
             </CardBody>
           </Card>
 
-          {/* Submitted Feedback History for Trainee */}
-          <div className="space-y-3">
-            <div className="flex items-center justify-between">
-              <h3 className="text-sm font-bold text-slate-800 flex items-center gap-1.5">
-                <FileText className="w-4 h-4 text-purple-600" />
-                <span>Weekly Submissions Log ({feedbackHistory.length} of {totalWeeksCount})</span>
-                <span className="text-[11px] font-normal text-slate-500">— {trainee.name}</span>
-              </h3>
-              <span className="text-[11px] text-slate-500 font-medium">Click week to edit</span>
-            </div>
-
-            {feedbackHistory.length === 0 ? (
-              <div className="p-4 rounded-xl bg-slate-50 border border-slate-200/70 text-center">
-                <p className="text-xs text-slate-400 italic">No feedback submitted for {trainee.name} yet.</p>
-                <p className="text-[11px] text-slate-500 mt-1">Select Week 1 above to submit the first evaluation.</p>
-              </div>
-            ) : (
-              <div className="space-y-2.5">
-                {feedbackHistory.map((fb) => (
-                  <Card 
-                    key={fb.id} 
-                    className={`border transition-all cursor-pointer ${
-                      selectedWeek === fb.weekNumber 
-                        ? 'border-purple-300 bg-purple-50/30 ring-1 ring-purple-400' 
-                        : 'border-slate-200/80 bg-white hover:border-slate-300'
-                    }`}
-                  >
-                    <CardHeader 
-                      className="p-4 border-b border-slate-100/50"
-                      onClick={() => {
-                        setExpandedWeeks(prev => ({...prev, [fb.weekNumber]: !prev[fb.weekNumber]}));
-                      }}
-                    >
-                      <div className="flex justify-between items-center text-xs">
-                        <span className="font-bold text-purple-950 flex items-center gap-2">
-                          <span className="w-6 h-6 rounded-md bg-purple-100 text-purple-800 flex items-center justify-center text-[11px] font-black">
-                            W{fb.weekNumber}
-                          </span>
-                          <span>Week {fb.weekNumber} Review for <strong>{trainee.name}</strong></span>
-                          <ChevronRight className={`w-4 h-4 transition-transform ${expandedWeeks[fb.weekNumber] ? 'rotate-90' : ''}`} />
-                        </span>
-                        <span className="text-[11px] text-slate-400">
-                          {new Date(fb.submittedAt).toLocaleDateString()}
-                        </span>
-                      </div>
-                    </CardHeader>
-
-                    {expandedWeeks[fb.weekNumber] && (
-                      <CardBody className="p-4 space-y-3 bg-purple-50/20">
-                        <div className="space-y-2">
-                          <p className="text-[11px] font-bold text-slate-700 flex items-center gap-2">
-                            <CheckCircle2 className="w-3.5 h-3.5 text-emerald-600" />
-                            Feedback Details
-                          </p>
-                          <div className="bg-white rounded-lg border border-slate-200/70 p-3 space-y-2">
-                            {Object.entries(fb.answers || {}).map(([k, v]) => (
-                              <div key={k} className="flex justify-between items-start text-[11px] pb-1.5 border-b border-slate-100 last:border-0 last:pb-0">
-                                <span className="text-slate-600 font-medium capitalize">{k.replace(/_/g, ' ')}:</span>
-                                <span className="font-bold text-slate-800 text-right max-w-[60%]">
-                                  {k.toLowerCase().includes('rating') ? `★ ${v} / 5 (${RATING_LABELS[v] || ''})` : String(v)}
-                                </span>
-                              </div>
-                            ))}
-                          </div>
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => jumpToWeekFeedback(fb.weekNumber)}
-                          className="text-xs font-bold text-purple-600 hover:text-purple-700 flex items-center gap-1 mt-2"
-                        >
-                          <span>Edit this week's feedback</span>
-                          <ArrowRight className="w-3.5 h-3.5" />
-                        </button>
-                      </CardBody>
-                    )}
-                  </Card>
-                ))}
-              </div>
-            )}
-          </div>
-        </div>
+        </section>
 
       </div>
       </div>

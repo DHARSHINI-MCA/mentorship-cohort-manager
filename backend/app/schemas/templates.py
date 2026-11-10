@@ -25,10 +25,15 @@ class WeekInPlan(BaseModel):
     isBuffer: Optional[bool] = False
     courses: List[CourseInPlan] = []
 
+class TalentNextCourseAssignment(BaseModel):
+    courseId: str
+    isMandatory: bool = True
+
 class TrainingTemplateCreate(BaseModel):
     name: str
     totalWeeks: int
     weeks: List[WeekBase] = []
+    talentnextCourses: List[TalentNextCourseAssignment] = []
 
 class TrainingTemplateResponse(TrainingTemplateCreate):
     id: str
@@ -42,6 +47,7 @@ class CohortTrainingPlanResponse(BaseModel):
     coreWeeks: Optional[int] = None
     bufferWeeks: Optional[int] = None
     weeks: List[WeekInPlan] = []
+    talentnextCourses: List[TalentNextCourseAssignment] = []
     createdAt: datetime
 
 # Feedback

@@ -25,6 +25,8 @@ class MentorTraineeSummary(BaseModel):
     email: str
     department: str
     employeeId: str
+    location: Optional[str] = ""
+    timezone: Optional[str] = ""
     cohortId: str
     cohortName: str
     percentComplete: float

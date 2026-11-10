@@ -77,6 +77,8 @@ async def get_mentor_dashboard(
             "email": t.get("email", ""),
             "department": t.get("department", ""),
             "employeeId": t.get("employeeId", ""),
+            "location": t.get("location", ""),
+            "timezone": t.get("timezone", ""),
             "cohortId": t.get("cohortId", ""),
             "cohortName": t.get("cohortName", "Cohort"),
             "percentComplete": t.get("percentComplete", 0.0),

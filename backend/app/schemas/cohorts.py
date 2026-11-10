@@ -2,19 +2,16 @@ from pydantic import BaseModel
 from typing import Optional, List
 from datetime import datetime
 from enum import Enum
-from app.schemas.templates import WeekBase, FeedbackField, TrainingTemplateCreate, FeedbackTemplateCreate
+from app.schemas.templates import (
+    WeekBase, FeedbackField, TrainingTemplateCreate, FeedbackTemplateCreate,
+    TalentNextCourseAssignment,
+)
 
 
 class CohortStatus(str, Enum):
     DRAFT = "draft"
     ACTIVE = "active"
     CLOSED = "closed"
-
-
-class TalentNextCourseAssignment(BaseModel):
-    """TalentNext course assignment within a cohort"""
-    courseId: str
-    isMandatory: bool
 
 
 class CohortBase(BaseModel):

@@ -3,14 +3,10 @@ import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import api from '../../api/client';
 import { useToast } from '../../context/ToastContext';
-import { Card, CardBody, CardFooter } from '../../components/Card';
-import { Badge } from '../../components/Badge';
-import { ProgressBar } from '../../components/ProgressBar';
-import { SkeletonCard } from '../../components/SkeletonCard';
 import { EmptyState } from '../../components/EmptyState';
 import { Modal } from '../../components/Modal';
 import { 
-  PlusCircle, Calendar, Award, Users, ArrowRight, 
+  PlusCircle,
   Edit3, Layers, BookOpen, MessageSquare, Plus, Trash2, 
   ChevronRight, Sparkles, AlertCircle, Check, Search
 } from 'lucide-react';
@@ -88,6 +84,18 @@ export function CohortsList() {
     },
     onError: (err) => {
       showToast(err.response?.data?.detail || 'Failed to save cohort', 'error');
+    },
+  });
+
+  const deleteMutation = useMutation({
+    mutationFn: async (cohortId) => api.delete(`/cohorts/${cohortId}`),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['cohorts'] });
+      queryClient.invalidateQueries({ queryKey: ['adminDashboard'] });
+      showToast('Cohort and its records deleted');
+    },
+    onError: (err) => {
+      showToast(err.response?.data?.detail || 'Failed to delete cohort', 'error');
     },
   });
 
@@ -298,7 +306,8 @@ export function CohortsList() {
         payload.customTrainingPlan = {
           name: customPlan.name || `${name} Training Plan`,
           totalWeeks: customPlan.totalWeeks || customPlan.weeks.length,
-          weeks: customPlan.weeks
+          weeks: customPlan.weeks,
+          talentnextCourses: customPlan.talentnextCourses || selectedTalentNextCourses
         };
       } else if (selectedTrainingTplId) {
         payload.trainingTemplateId = selectedTrainingTplId;
@@ -338,10 +347,10 @@ export function CohortsList() {
         </button>
       </div>
 
-      {/* Cohorts Grid */}
+      {/* Cohort portfolio */}
       {isLoading ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          <SkeletonCard count={6} />
+        <div className="divide-y divide-slate-200 border-y border-slate-200">
+          {[1, 2, 3].map((row) => <div key={row} className="h-16 animate-pulse bg-slate-50" />)}
         </div>
       ) : cohortsData?.items?.length === 0 ? (
         <EmptyState
@@ -359,63 +368,53 @@ export function CohortsList() {
           }
         />
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {cohortsData?.items?.map((cohort) => (
-            <Card key={cohort.id} hover className="flex flex-col justify-between">
-              <CardBody className="p-6">
-                <div className="flex justify-between items-start gap-2 mb-3">
-                  <h3 className="font-bold text-slate-800 text-base line-clamp-1">{cohort.name}</h3>
-                  <div className="flex items-center gap-1.5 shrink-0">
-                    <Badge variant={cohort.status}>{cohort.status}</Badge>
-                    <button
-                      onClick={(e) => handleOpenEdit(e, cohort)}
-                      className="p-1 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
-                      title="Edit cohort details"
-                    >
-                      <Edit3 className="w-3.5 h-3.5" />
-                    </button>
-                  </div>
-                </div>
-
-                <p className="text-xs text-slate-500 line-clamp-2 mb-5 min-h-[32px]">
-                  {cohort.description || 'No description provided.'}
-                </p>
-
-                <div className="space-y-3.5 pt-3 border-t border-slate-100">
-                  <ProgressBar percent={cohort.avgProgress || 0} size="sm" />
-
-                  <div className="grid grid-cols-2 gap-2 text-xs text-slate-600">
-                    <div className="flex items-center gap-1.5">
-                      <Award className="w-3.5 h-3.5 text-blue-500" />
-                      <span>{cohort.mentorCount} Mentors</span>
-                    </div>
-                    <div className="flex items-center gap-1.5">
-                      <Users className="w-3.5 h-3.5 text-purple-500" />
-                      <span>{cohort.activeTraineeCount ?? cohort.traineeCount} Active Trainees</span>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-1.5 text-[11px] text-slate-400">
-                    <Calendar className="w-3.5 h-3.5" />
-                    <span>{cohort.startDate} to {cohort.endDate}</span>
-                  </div>
-                </div>
-              </CardBody>
-
-              <CardFooter className="bg-slate-50/50">
-                <span className="text-[11px] font-semibold text-slate-500">
-                  <span>{cohort.assignedTraineeCount} assigned · {cohort.droppedOutTraineeCount || 0} dropped out</span>
-                </span>
-                <Link
-                  to={`/admin/cohorts/${cohort.id}`}
-                  className="text-xs font-bold text-emerald-600 hover:text-emerald-700 flex items-center gap-1"
-                >
-                  <span>Open Cohort Hub</span>
-                  <ArrowRight className="w-3.5 h-3.5" />
-                </Link>
-              </CardFooter>
-            </Card>
-          ))}
+        <div className="overflow-x-auto border-y border-slate-200">
+          <table className="w-full min-w-[1000px] text-left text-sm">
+            <thead className="bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-500">
+              <tr>
+                <th className="px-4 py-3">Cohort</th>
+                <th className="px-4 py-3">Status / timeline</th>
+                <th className="px-4 py-3">Mentors</th>
+                <th className="px-4 py-3">Trainees</th>
+                <th className="px-4 py-3">Assignment</th>
+                <th className="px-4 py-3">Progress</th>
+                <th className="px-4 py-3 text-right">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-200">
+              {cohortsData?.items?.map((cohort) => {
+                const totalTrainees = cohort.traineeCount || 0;
+                const activeTrainees = cohort.activeTraineeCount ?? totalTrainees;
+                const assigned = cohort.assignedTraineeCount || 0;
+                const progress = Math.max(0, Math.min(100, Number(cohort.avgProgress) || 0));
+                return (
+                  <tr key={cohort.id} className="hover:bg-slate-50/70">
+                    <th scope="row" className="px-4 py-3 font-semibold text-slate-900">
+                      <Link to={`/admin/cohorts/${cohort.id}`} className="hover:text-emerald-700">{cohort.name}</Link>
+                      {cohort.description && <p className="mt-0.5 max-w-sm truncate text-xs font-normal text-slate-500">{cohort.description}</p>}
+                    </th>
+                    <td className="px-4 py-3">
+                      <span className={`font-semibold capitalize ${cohort.status === 'active' ? 'text-emerald-700' : cohort.status === 'closed' ? 'text-slate-500' : 'text-amber-700'}`}>{cohort.status}</span>
+                      <p className="mt-0.5 whitespace-nowrap text-xs text-slate-500">{cohort.startDate} – {cohort.endDate}</p>
+                    </td>
+                    <td className="px-4 py-3 tabular-nums text-slate-700">{cohort.mentorCount || 0}</td>
+                    <td className="px-4 py-3 text-slate-700">
+                      <span className="tabular-nums">{activeTrainees}</span><span className="text-slate-500"> active / {totalTrainees}</span>
+                      {!!cohort.droppedOutTraineeCount && <p className="mt-0.5 text-xs text-rose-700">{cohort.droppedOutTraineeCount} dropped out</p>}
+                    </td>
+                    <td className="px-4 py-3 tabular-nums text-slate-700">{assigned} / {activeTrainees}</td>
+                    <td className="px-4 py-3">
+                      <div className="flex items-center gap-2"><div className="h-1.5 w-20 overflow-hidden rounded bg-slate-200"><div className="h-full rounded bg-emerald-600" style={{ width: `${progress}%` }} /></div><span className="tabular-nums text-slate-700">{progress}%</span></div>
+                    </td>
+                    <td className="px-4 py-3 text-right whitespace-nowrap">
+                      <button onClick={(event) => handleOpenEdit(event, cohort)} className="mr-3 font-medium text-slate-600 hover:text-slate-900">Edit</button>
+                      <Link to={`/admin/cohorts/${cohort.id}`} className="font-semibold text-emerald-700 hover:text-emerald-900">Open cohort →</Link>
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
       )}
 
@@ -748,6 +747,23 @@ export function CohortsList() {
           )}
 
           <div className="pt-4 border-t border-slate-100 flex justify-end gap-3">
+            {editingCohort && (
+              <button
+                type="button"
+                disabled={deleteMutation.isPending}
+                onClick={() => {
+                  const confirmed = window.confirm(
+                    `Delete “${editingCohort.name}”? This permanently removes its nominations, mentor and trainee records, batches, sessions, attendance, progress, feedback, and cohort-specific plans.`
+                  );
+                  if (confirmed) deleteMutation.mutate(editingCohort.id, {
+                    onSuccess: handleCloseModal,
+                  });
+                }}
+                className="mr-auto rounded-xl border border-rose-200 px-4 py-2 text-xs font-bold text-rose-700 hover:bg-rose-50 disabled:opacity-50"
+              >
+                {deleteMutation.isPending ? 'Deleting…' : 'Delete Cohort'}
+              </button>
+            )}
             <button
               type="button"
               onClick={handleCloseModal}

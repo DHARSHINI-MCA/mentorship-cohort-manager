@@ -2,9 +2,7 @@ import React, { useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../../api/client';
 import { useToast } from '../../context/ToastContext';
-import { Card, CardHeader, CardTitle, CardBody, CardFooter } from '../../components/Card';
 import { Badge } from '../../components/Badge';
-import { SkeletonCard } from '../../components/SkeletonCard';
 import { EmptyState } from '../../components/EmptyState';
 import { Modal } from '../../components/Modal';
 import { 
@@ -29,6 +27,7 @@ export function TrainingTemplates() {
       ]
     }
   ]);
+  const [talentnextCourses, setTalentnextCourses] = useState([]);
 
   const queryClient = useQueryClient();
   const { showToast } = useToast();
@@ -39,6 +38,11 @@ export function TrainingTemplates() {
       const res = await api.get('/training-templates?limit=50');
       return res.data;
     },
+  });
+
+  const { data: talentNextCatalog = [] } = useQuery({
+    queryKey: ['talentnextCoursesList'],
+    queryFn: async () => (await api.get('/talentnext-courses')).data || [],
   });
 
   const createMutation = useMutation({
@@ -86,6 +90,7 @@ export function TrainingTemplates() {
 
   const resetBuilder = () => {
     setName('');
+    setTalentnextCourses([]);
     setWeeks([
       {
         weekNumber: 1,
@@ -164,20 +169,66 @@ export function TrainingTemplates() {
     createMutation.mutate({
       name,
       totalWeeks: weeks.length,
-      weeks
+      weeks,
+      talentnextCourses
     });
   };
 
+  const renderTalentNextEditor = (assignments, onChange) => (
+    <section className="space-y-2 rounded-xl border border-amber-200 bg-amber-50/60 p-4">
+      <div>
+        <h3 className="text-xs font-bold uppercase tracking-wider text-slate-700">TalentNext courses</h3>
+        <p className="mt-1 text-xs text-slate-500">Selected courses are included when this training plan is applied to a cohort.</p>
+      </div>
+      {talentNextCatalog.length ? (
+        <div className="divide-y divide-amber-100 rounded-lg border border-amber-100 bg-white">
+          {talentNextCatalog.map((course) => {
+            const assignment = assignments.find((item) => item.courseId === course.id);
+            return (
+              <div key={course.id} className="flex flex-wrap items-center justify-between gap-3 px-3 py-2.5">
+                <label className="flex min-w-0 items-center gap-2 text-xs font-medium text-slate-800">
+                  <input
+                    type="checkbox"
+                    checked={Boolean(assignment)}
+                    onChange={(event) => {
+                      const next = event.target.checked
+                        ? [...assignments, { courseId: course.id, isMandatory: true }]
+                        : assignments.filter((item) => item.courseId !== course.id);
+                      onChange(next);
+                    }}
+                    className="h-4 w-4 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500"
+                  />
+                  <span className="truncate">{course.name}</span>
+                </label>
+                {assignment && (
+                  <select
+                    aria-label={`${course.name} requirement`}
+                    value={assignment.isMandatory ? 'required' : 'optional'}
+                    onChange={(event) => onChange(assignments.map((item) => item.courseId === course.id
+                      ? { ...item, isMandatory: event.target.value === 'required' }
+                      : item))}
+                    className="rounded-md border border-slate-200 px-2 py-1 text-xs text-slate-700"
+                  >
+                    <option value="required">Required</option>
+                    <option value="optional">Optional</option>
+                  </select>
+                )}
+              </div>
+            );
+          })}
+        </div>
+      ) : <p className="rounded-lg border border-dashed border-amber-200 bg-white px-3 py-4 text-center text-xs text-slate-500">No TalentNext courses are available yet.</p>}
+    </section>
+  );
+
   return (
-    <div className="space-y-8">
+    <div className="space-y-4">
       {/* Header */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <div className="flex items-center justify-between py-2 border-b border-slate-200">
         <div>
-          <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight">
-            Training Track Templates
-          </h1>
-          <p className="text-sm text-slate-500 mt-1">
-            Build multi-week training curricula with structured courses. When applied to a cohort, a fresh independent copy is generated.
+          <h1 className="text-sm font-bold text-slate-900 tracking-tight">Training Track Templates</h1>
+          <p className="text-xs text-slate-400 mt-0.5">
+            Multi-week training curricula. When applied to a cohort, a fresh independent copy is generated.
           </p>
         </div>
         <button
@@ -185,18 +236,16 @@ export function TrainingTemplates() {
             resetBuilder();
             setIsBuilderOpen(true);
           }}
-          className="px-4 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-sm font-bold rounded-xl shadow-sm flex items-center gap-2 transition-all shrink-0"
+          className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-lg shadow-sm flex items-center gap-1.5 transition-all shrink-0"
         >
-          <PlusCircle className="w-4 h-4" />
+          <PlusCircle className="w-3.5 h-3.5" />
           <span>New Training Template</span>
         </button>
       </div>
 
-      {/* Templates Grid */}
+      {/* Templates Table */}
       {isLoading ? (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          <SkeletonCard count={3} />
-        </div>
+        <div className="py-8 text-center text-xs text-slate-400 animate-pulse">Loading templates...</div>
       ) : templatesData?.items?.length === 0 ? (
         <EmptyState
           icon={BookOpen}
@@ -216,76 +265,87 @@ export function TrainingTemplates() {
           }
         />
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-          {templatesData?.items?.map((tpl) => {
-            const totalCourses = tpl.weeks?.reduce((acc, w) => acc + (w.courses?.length || 0), 0) || 0;
-            const totalHours = tpl.weeks?.reduce(
-              (acc, w) => acc + (w.courses?.reduce((cAcc, c) => cAcc + (c.durationHrs || 0), 0) || 0),
-              0
-            ) || 0;
+        <div className="border border-slate-200 rounded-lg overflow-hidden">
+          <table className="w-full text-xs">
+            <thead>
+              <tr className="bg-slate-50 border-b border-slate-200">
+                <th className="py-2 px-4 text-left font-bold uppercase tracking-wider text-slate-500 text-[11px]">Template Name</th>
+                <th className="py-2 px-4 text-center font-bold uppercase tracking-wider text-slate-500 text-[11px]">Weeks</th>
+                <th className="py-2 px-4 text-center font-bold uppercase tracking-wider text-slate-500 text-[11px]">Courses</th>
+                <th className="py-2 px-4 text-center font-bold uppercase tracking-wider text-slate-500 text-[11px]">Total Hours</th>
+                <th className="py-2 px-4 text-right font-bold uppercase tracking-wider text-slate-500 text-[11px]">Actions</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {templatesData?.items?.map((tpl) => {
+                const totalCourses = tpl.weeks?.reduce((acc, w) => acc + (w.courses?.length || 0), 0) || 0;
+                const totalHours = tpl.weeks?.reduce(
+                  (acc, w) => acc + (w.courses?.reduce((cAcc, c) => cAcc + (c.durationHrs || 0), 0) || 0),
+                  0
+                ) || 0;
 
-            return (
-              <Card key={tpl.id} hover className="flex flex-col justify-between">
-                <CardBody className="p-6">
-                  <div className="flex justify-between items-start gap-2 mb-3">
-                    <h3 className="font-bold text-slate-800 text-base line-clamp-1">{tpl.name}</h3>
-                    <Badge variant="primary">{tpl.totalWeeks} Weeks</Badge>
-                  </div>
-
-                  <div className="mt-4 pt-4 border-t border-slate-100 grid grid-cols-2 gap-3 text-xs text-slate-600">
-                    <div className="flex items-center gap-1.5">
-                      <Layers className="w-4 h-4 text-emerald-600" />
-                      <span>{totalCourses} Courses</span>
-                    </div>
-                    <div className="flex items-center gap-1.5">
-                      <Clock className="w-4 h-4 text-blue-600" />
-                      <span>{totalHours} Total Hours</span>
-                    </div>
-                  </div>
-
-                  {/* Weeks list preview */}
-                  <div className="mt-4 space-y-1.5">
-                    {tpl.weeks?.slice(0, 3).map((w) => (
-                      <div key={w.weekNumber} className="text-xs p-2 bg-slate-50 rounded-lg flex justify-between items-center text-slate-600">
-                        <span className="font-semibold line-clamp-1">{w.title}</span>
-                        <span className="text-slate-400 shrink-0">{w.courses?.length || 0} modules</span>
+                return (
+                  <tr key={tpl.id} className="hover:bg-slate-50 transition-colors">
+                    <td className="py-2.5 px-4 font-semibold text-slate-800">{tpl.name}</td>
+                    <td className="py-2.5 px-4 text-center">
+                      <span className="text-[11px] font-semibold uppercase px-1.5 py-0.5 rounded bg-emerald-50 text-emerald-700 border border-emerald-200">
+                        {tpl.totalWeeks}w
+                      </span>
+                    </td>
+                    <td className="py-2.5 px-4 text-center text-slate-600">
+                      <span className="flex items-center justify-center gap-1">
+                        <Layers className="w-3 h-3 text-emerald-500" />
+                        {totalCourses}
+                      </span>
+                    </td>
+                    <td className="py-2.5 px-4 text-center text-slate-600">
+                      <span className="flex items-center justify-center gap-1">
+                        <Clock className="w-3 h-3 text-blue-500" />
+                        {totalHours}h
+                      </span>
+                    </td>
+                    <td className="py-2.5 px-4 text-right">
+                      <div className="flex items-center justify-end gap-3">
+                        <button
+                          onClick={() => {
+                            setPreviewTemplate(tpl);
+                            setIsEditingTemplate(false);
+                            setIsPreviewOpen(true);
+                          }}
+                          className="text-xs font-semibold text-emerald-700 hover:underline flex items-center gap-1"
+                        >
+                          <Eye className="w-3 h-3" />
+                          View Curriculum
+                        </button>
+                        <button
+                          onClick={() => {
+                            setPreviewTemplate(tpl);
+                            setIsEditingTemplate(true);
+                            setIsPreviewOpen(true);
+                          }}
+                          className="text-xs font-semibold text-slate-500 hover:text-slate-900 flex items-center gap-1"
+                        >
+                          <Edit3 className="w-3 h-3" />
+                          Edit
+                        </button>
+                        <button
+                          onClick={() => {
+                            if (window.confirm(`Delete training template "${tpl.name}"?`)) {
+                              deleteMutation.mutate(tpl.id);
+                            }
+                          }}
+                          className="text-xs font-semibold text-slate-400 hover:text-rose-600 transition-colors"
+                          title="Delete template"
+                        >
+                          <Trash2 className="w-3.5 h-3.5" />
+                        </button>
                       </div>
-                    ))}
-                    {tpl.weeks?.length > 3 && (
-                      <p className="text-[11px] text-slate-400 italic text-center">
-                        +{tpl.weeks.length - 3} more weeks...
-                      </p>
-                    )}
-                  </div>
-                </CardBody>
-
-                <CardFooter className="bg-slate-50/50">
-                  <button
-                    onClick={() => {
-                      setPreviewTemplate(tpl);
-                      setIsEditingTemplate(false);
-                      setIsPreviewOpen(true);
-                    }}
-                    className="text-xs font-bold text-slate-600 hover:text-slate-800 flex items-center gap-1"
-                  >
-                    <Eye className="w-3.5 h-3.5" />
-                    <span>View Curriculum</span>
-                  </button>
-                  <button
-                    onClick={() => {
-                      if (window.confirm(`Delete training template "${tpl.name}"?`)) {
-                        deleteMutation.mutate(tpl.id);
-                      }
-                    }}
-                    className="p-1.5 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
-                    title="Delete template"
-                  >
-                    <Trash2 className="w-4 h-4" />
-                  </button>
-                </CardFooter>
-              </Card>
-            );
-          })}
+                    </td>
+                  </tr>
+                );
+              })}
+            </tbody>
+          </table>
         </div>
       )}
 
@@ -415,6 +475,8 @@ export function TrainingTemplates() {
             </div>
           </div>
 
+          {renderTalentNextEditor(talentnextCourses, setTalentnextCourses)}
+
           <div className="pt-4 border-t border-slate-100 flex justify-end gap-3">
             <button
               type="button"
@@ -451,7 +513,8 @@ export function TrainingTemplates() {
               updateMutation.mutate({
                 name: previewTemplate.name,
                 totalWeeks: previewTemplate.totalWeeks,
-                weeks: previewTemplate.weeks
+                weeks: previewTemplate.weeks,
+                talentnextCourses: previewTemplate.talentnextCourses || []
               });
             }}
             className="space-y-4"
@@ -589,6 +652,11 @@ export function TrainingTemplates() {
               ))}
             </div>
 
+            {renderTalentNextEditor(
+              previewTemplate.talentnextCourses || [],
+              (assignments) => setPreviewTemplate({ ...previewTemplate, talentnextCourses: assignments })
+            )}
+
             <div className="pt-4 border-t border-slate-100 flex justify-end gap-3">
               <button
                 type="button"
@@ -610,6 +678,9 @@ export function TrainingTemplates() {
           <div className="space-y-4">
             <div className="flex items-center gap-3">
               <Badge variant="primary">{previewTemplate?.totalWeeks} Weeks Total</Badge>
+              {(previewTemplate?.talentnextCourses || []).length > 0 && (
+                <Badge variant="warning">{previewTemplate.talentnextCourses.length} TalentNext courses</Badge>
+              )}
               <button
                 onClick={() => setIsEditingTemplate(true)}
                 className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold flex items-center gap-1 shadow-xs transition-colors"
@@ -639,6 +710,19 @@ export function TrainingTemplates() {
                 </div>
               ))}
             </div>
+            {(previewTemplate?.talentnextCourses || []).length > 0 && (
+              <section className="border-t border-slate-200 pt-3">
+                <h3 className="text-xs font-bold uppercase tracking-wider text-slate-700">TalentNext courses</h3>
+                <ul className="mt-2 divide-y divide-slate-100 border-y border-slate-100">
+                  {previewTemplate.talentnextCourses.map((assignment) => (
+                    <li key={assignment.courseId} className="flex items-center justify-between gap-3 py-2 text-xs">
+                      <span className="font-medium text-slate-800">{talentNextCatalog.find((course) => course.id === assignment.courseId)?.name || 'Course unavailable'}</span>
+                      <span className={assignment.isMandatory ? 'font-semibold text-amber-700' : 'text-slate-500'}>{assignment.isMandatory ? 'Required' : 'Optional'}</span>
+                    </li>
+                  ))}
+                </ul>
+              </section>
+            )}
           </div>
         )}
       </Modal>

@@ -3,10 +3,9 @@ import { useParams, Link } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../../api/client';
 import { useToast } from '../../context/ToastContext';
-import { Card, CardHeader, CardTitle, CardBody, CardFooter } from '../../components/Card';
+import { CardTitle } from '../../components/Card';
 import { Badge } from '../../components/Badge';
 import { ProgressBar } from '../../components/ProgressBar';
-import { SkeletonCard } from '../../components/SkeletonCard';
 import { EmptyState } from '../../components/EmptyState';
 import { Modal } from '../../components/Modal';
 import { 
@@ -26,6 +25,9 @@ export function CohortDetail() {
   // Search & Filter state for Nominees tab
   const [searchTerm, setSearchTerm] = useState('');
   const [assignmentFilter, setAssignmentFilter] = useState('ALL');
+  const [assignmentTraineeSearch, setAssignmentTraineeSearch] = useState('');
+  const [assignmentMentorSearch, setAssignmentMentorSearch] = useState('');
+  const [assignmentMentorFilter, setAssignmentMentorFilter] = useState('ALL');
 
   // Modals
   const [isMentorModalOpen, setIsMentorModalOpen] = useState(false);
@@ -511,7 +513,9 @@ export function CohortDetail() {
     return (
       <div className="space-y-6">
         <div className="h-6 bg-slate-200 rounded w-32 animate-pulse" />
-        <SkeletonCard count={3} />
+        <div className="divide-y divide-slate-200 border-y border-slate-200">
+          {[1, 2, 3].map((row) => <div key={row} className="h-14 animate-pulse bg-slate-50" />)}
+        </div>
       </div>
     );
   }
@@ -563,6 +567,22 @@ export function CohortDetail() {
     return matchesSearch && matchesAssign;
   });
 
+  const assignmentMentors = mentorsData?.items || [];
+  const mentorOptionsForAssignment = assignmentMentors.filter((mentor) => {
+    const query = assignmentMentorSearch.trim().toLowerCase();
+    return !query || [mentor.name, mentor.employeeId, mentor.email]
+      .some((value) => value?.toLowerCase().includes(query));
+  });
+  const filteredAssignmentTrainees = (traineesData?.items || []).filter((trainee) => {
+    const query = assignmentTraineeSearch.trim().toLowerCase();
+    const matchesTrainee = !query || [trainee.name, trainee.employeeId, trainee.email, trainee.location, trainee.department]
+      .some((value) => value?.toLowerCase().includes(query));
+    const matchesMentor = assignmentMentorFilter === 'ALL'
+      || (assignmentMentorFilter === 'UNASSIGNED' && !trainee.mentorId)
+      || String(trainee.mentorId || '') === assignmentMentorFilter;
+    return matchesTrainee && matchesMentor;
+  });
+
   return (
     <div className="space-y-8">
       {/* Back button & Breadcrumb */}
@@ -576,8 +596,8 @@ export function CohortDetail() {
         </Link>
 
         {/* Cohort Header Card */}
-        <Card className="border-emerald-100 bg-gradient-to-r from-white via-white to-emerald-50/30">
-          <CardBody className="p-6 sm:p-8">
+        <section className="border-b border-slate-200 pb-5">
+          <div className="px-0 py-4">
             <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
               <div>
                 <div className="flex items-center gap-2.5 mb-2">
@@ -602,18 +622,6 @@ export function CohortDetail() {
 
               {/* Status & Timeline Controls */}
               <div className="flex flex-wrap items-center gap-2 self-start sm:self-auto">
-                <button
-                  onClick={() => {
-                    setEditName(cohort.name);
-                    setEditDesc(cohort.description || '');
-                    setIsEditTimelineOpen(true);
-                  }}
-                  className="px-3.5 py-2 bg-white hover:bg-slate-50 border border-slate-200 text-slate-700 text-xs font-bold rounded-xl shadow-xs flex items-center gap-1.5 transition-all"
-                >
-                  <Edit3 className="w-3.5 h-3.5 text-emerald-600" />
-                  <span>Edit</span>
-                </button>
-
                 {cohort.status === 'draft' && (
                   <button
                     onClick={() => statusMutation.mutate('active')}
@@ -636,8 +644,8 @@ export function CohortDetail() {
                 )}
               </div>
             </div>
-          </CardBody>
-        </Card>
+          </div>
+        </section>
       </div>
 
       {/* Tabs Bar */}
@@ -671,56 +679,18 @@ export function CohortDetail() {
       {/* TAB 1: OVERVIEW */}
       {activeTab === 'overview' && (
         <div className="space-y-6">
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-5">
-            <Card>
-              <CardBody className="p-5">
-                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Mentors</span>
-                <div className="mt-2 text-2xl font-black text-slate-800">{cohort.mentorCount}</div>
-                <p className="text-xs text-slate-500 mt-1">Available mentors</p>
-              </CardBody>
-            </Card>
-
-            <Card>
-              <CardBody className="p-5">
-                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Trainees</span>
-                <div className="mt-2 text-2xl font-black text-slate-800">{cohort.activeTraineeCount ?? cohort.traineeCount}</div>
-                <p className="text-xs text-slate-500 mt-1">Active · {cohort.traineeCount} total</p>
-              </CardBody>
-            </Card>
-
-            <Card className="border-rose-100">
-              <CardBody className="p-5">
-                <span className="text-[11px] font-bold uppercase tracking-wider text-rose-500">Dropped Out</span>
-                <div className="mt-2 text-2xl font-black text-rose-600">{cohort.droppedOutTraineeCount || 0}</div>
-                <p className="text-xs text-slate-500 mt-1">Trainees who left the cohort</p>
-              </CardBody>
-            </Card>
-
-            <Card>
-              <CardBody className="p-5">
-                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Assigned Trainees</span>
-                <div className="mt-2 text-2xl font-black text-slate-800">
-                  {cohort.assignedTraineeCount} / {cohort.activeTraineeCount ?? cohort.traineeCount}
-                </div>
-                <p className="text-xs text-slate-500 mt-1">Paired with mentors</p>
-              </CardBody>
-            </Card>
-
-            <Card>
-              <CardBody className="p-5">
-                <span className="text-[11px] font-bold uppercase tracking-wider text-slate-400">Cohort Completion</span>
-                <div className="mt-2 text-2xl font-black text-emerald-600">{cohort.avgProgress}%</div>
-                <div className="mt-2">
-                  <ProgressBar percent={cohort.avgProgress} size="sm" showLabel={false} />
-                </div>
-              </CardBody>
-            </Card>
+          <div className="grid grid-cols-2 gap-x-6 gap-y-4 border-y border-slate-200 py-4 sm:grid-cols-3 lg:grid-cols-5">
+            <div><p className="text-xs font-medium text-slate-500">Mentors</p><p className="mt-1 text-xl font-semibold text-slate-900">{cohort.mentorCount || 0}</p></div>
+            <div><p className="text-xs font-medium text-slate-500">Active trainees</p><p className="mt-1 text-xl font-semibold text-slate-900">{cohort.activeTraineeCount ?? cohort.traineeCount ?? 0}<span className="ml-1 text-xs font-normal text-slate-500">/ {cohort.traineeCount || 0}</span></p></div>
+            <div><p className="text-xs font-medium text-slate-500">Dropped out</p><p className="mt-1 text-xl font-semibold text-rose-700">{cohort.droppedOutTraineeCount || 0}</p></div>
+            <div><p className="text-xs font-medium text-slate-500">Mentor assigned</p><p className="mt-1 text-xl font-semibold text-slate-900">{cohort.assignedTraineeCount || 0}<span className="ml-1 text-xs font-normal text-slate-500">/ {cohort.activeTraineeCount ?? cohort.traineeCount ?? 0}</span></p></div>
+            <div><p className="text-xs font-medium text-slate-500">Average completion</p><p className="mt-1 text-xl font-semibold text-emerald-700">{cohort.avgProgress || 0}%</p></div>
           </div>
 
           {/* Configured Templates Preview Card */}
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <Card>
-              <CardHeader>
+          <div className="grid grid-cols-1 gap-8 divide-y divide-slate-200 md:grid-cols-2 md:divide-x md:divide-y-0">
+            <section className="min-w-0 pb-7 md:pb-0 md:pr-8">
+              <div className="mb-4 border-b border-slate-200 pb-3">
                 <div className="flex items-center justify-between w-full">
                   <CardTitle subtitle="Independent snapshot created for this cohort">
                     Applied Training Plan
@@ -769,8 +739,8 @@ export function CohortDetail() {
                     )}
                   </div>
                 </div>
-              </CardHeader>
-              <CardBody className="p-6">
+              </div>
+              <div>
                 {activePlan ? (
                   <div className="space-y-3">
                     <div>
@@ -836,11 +806,11 @@ export function CohortDetail() {
                     No training plan applied yet. Go to the Cohort Config tab to select and apply a training plan.
                   </p>
                 )}
-              </CardBody>
-            </Card>
+              </div>
+            </section>
 
-            <Card>
-              <CardHeader>
+            <section className="min-w-0 pt-7 md:pt-0 md:pl-8">
+              <div className="mb-4 border-b border-slate-200 pb-3">
                 <div className="flex items-center justify-between w-full">
                   <CardTitle subtitle="Independent feedback questionnaire copy">
                     Applied Feedback Form
@@ -863,8 +833,8 @@ export function CohortDetail() {
                     )}
                   </div>
                 </div>
-              </CardHeader>
-              <CardBody className="p-6">
+              </div>
+              <div>
                 {activeForm ? (
                   <div className="space-y-3">
                     <h4 className="text-sm font-bold text-slate-800">{activeForm.name}</h4>
@@ -883,8 +853,8 @@ export function CohortDetail() {
                     No feedback form applied yet. Go to the Cohort Config tab to select and apply a feedback form.
                   </p>
                 )}
-              </CardBody>
-            </Card>
+              </div>
+            </section>
           </div>
         </div>
       )}
@@ -939,9 +909,7 @@ export function CohortDetail() {
 
           {/* Mentors with Trainees Grid */}
           {mentorsLoading ? (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-              <SkeletonCard count={3} />
-            </div>
+            <div className="divide-y divide-slate-200 border-y border-slate-200">{[1, 2, 3].map((row) => <div key={row} className="h-20 animate-pulse bg-slate-50" />)}</div>
           ) : filteredMentors.length === 0 ? (
             <EmptyState
               icon={searchTerm || assignmentFilter !== 'ALL' ? Search : Award}
@@ -974,7 +942,7 @@ export function CohortDetail() {
               }
             />
           ) : (
-            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
+            <div className="divide-y divide-slate-200 border-y border-slate-200">
               {filteredMentors.map((mentor) => {
                 const assignedTrainees = mentor.assignedTrainees || [];
                 const activeAssignedTrainees = assignedTrainees.filter((trainee) => trainee.status !== 'dropped_out');
@@ -986,73 +954,39 @@ export function CohortDetail() {
                 const mentorSessionCount = mentorBatches.reduce((count, batch) => count + (batch.sessions?.length || 0), 0);
 
                 return (
-                  <Card key={mentor.id} className="flex flex-col justify-between border-slate-200/90 shadow-soft hover:border-slate-300 transition-all">
-                    <CardBody className="p-5 space-y-4">
-                      {/* 1. Mentor Profile Header */}
-                      <div>
-                        <div className="flex justify-between items-start gap-2 mb-1.5">
-                          <div>
-                            <div className="flex items-center gap-1.5">
-                              <h4 className="font-bold text-slate-800 text-sm">{mentor.name}</h4>
-                              {mentor.employeeId && (
-                                <span className="text-[10px] font-mono font-bold text-slate-600 bg-slate-100 px-1.5 py-0.5 rounded">
-                                  {mentor.employeeId}
-                                </span>
-                              )}
-                            </div>
-                            <p className="text-xs text-slate-500">{mentor.email}</p>
-                          </div>
-                          <Badge variant={!mentor.isLoginActive || !mentor.isAccountActive ? 'draft' : 'active'}>
-                            {!mentor.isLoginActive ? 'No Login' : !mentor.isAccountActive ? 'Account Deactivated' : 'Login Active'}
-                          </Badge>
+                  <section key={mentor.id} className="py-3">
+                    <div className="grid grid-cols-1 items-center gap-3 lg:grid-cols-[minmax(220px,1.5fr)_minmax(150px,1fr)_minmax(180px,1.2fr)_auto]">
+                      <div className="min-w-0">
+                        <div className="flex flex-wrap items-center gap-x-2 gap-y-0.5">
+                          <h4 className="font-bold text-sm text-slate-900">{mentor.name}</h4>
+                          {mentor.employeeId && <span className="font-mono text-[10px] text-slate-500">{mentor.employeeId}</span>}
                         </div>
-
-                        <div className="flex items-center gap-2 mt-2">
-                          <span className="font-semibold text-[11px] bg-slate-100 text-slate-700 px-2.5 py-0.5 rounded-lg">
-                            {mentor.department}
-                          </span>
-                        </div>
+                        <p className="truncate text-xs text-slate-500">{mentor.email}</p>
                       </div>
-
-                      {/* 2. Admission & Nomination Information */}
-                      <div className="p-2.5 rounded-xl bg-slate-50 border border-slate-100 space-y-1.5 text-xs">
-                        <div className="flex items-center justify-between text-[11px]">
-                          <span className="flex items-center gap-1 text-slate-500">
-                            <UserCheck className="w-3.5 h-3.5 text-blue-600" />
-                            <span>Nominated By:</span>
-                          </span>
-                          <span className="font-bold text-slate-800">
-                            {mentor.nominatorName || 'Platform Administrator'}
-                          </span>
-                        </div>
-                        {mentor.createdAt && (
-                          <div className="flex items-center justify-between text-[11px]">
-                            <span className="flex items-center gap-1 text-slate-500">
-                              <Calendar className="w-3.5 h-3.5 text-slate-400" />
-                              <span>Admission Date:</span>
-                            </span>
-                            <span className="text-slate-600 font-medium">
-                              {new Date(mentor.createdAt).toLocaleDateString()}
-                            </span>
-                          </div>
+                      <div className="text-xs text-slate-600"><span className="text-slate-400">Nominated by · </span>{mentor.nominatorName || 'Administrator'}</div>
+                      <div className="text-xs text-slate-700">
+                        <span className="font-semibold">{activeAssignedTrainees.length}</span> active
+                        {droppedOutAssignedTrainees > 0 && <span className="ml-2 text-rose-700">{droppedOutAssignedTrainees} dropped</span>}
+                        <span className="mx-2 text-slate-300">·</span>{mentorBatches.length} batches<span className="mx-2 text-slate-300">·</span>{mentorSessionCount} sessions
+                      </div>
+                      <div className="flex items-center justify-between gap-3 lg:justify-end">
+                        {mentor.isLoginActive ? (
+                          <button
+                            type="button"
+                            onClick={() => toggleAccountMutation.mutate({ userId: mentor.userId, isActive: !mentor.isAccountActive })}
+                            disabled={toggleAccountMutation.isPending}
+                            className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold disabled:cursor-wait disabled:opacity-50 ${mentor.isAccountActive ? 'border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100' : 'border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100'}`}
+                            title={`Click to ${mentor.isAccountActive ? 'deactivate' : 'activate'} this mentor`}
+                          >{mentor.isAccountActive ? 'Active' : 'Inactive'}</button>
+                        ) : (
+                          <button
+                            type="button"
+                            onClick={() => { setTargetMentor(mentor); setIsActivateModalOpen(true); }}
+                            className="rounded-full border border-amber-200 bg-amber-50 px-2.5 py-1 text-[11px] font-semibold text-amber-700 hover:bg-amber-100"
+                          >Activate login</button>
                         )}
-                      </div>
-
-                      <div className="flex items-center justify-between gap-3 rounded-xl border border-slate-100 bg-white px-3 py-2.5">
-                        <div className="text-xs text-slate-600">
-                          <span className="font-semibold">{activeAssignedTrainees.length}</span> active trainees
-                          {droppedOutAssignedTrainees > 0 && <><span className="mx-2 text-slate-300">·</span><span className="font-semibold text-rose-700">{droppedOutAssignedTrainees} dropped out</span></>}
-                          <span className="mx-2 text-slate-300">·</span>
-                          <span className="font-semibold">{mentorBatches.length}</span> groups
-                          <span className="mx-2 text-slate-300">·</span>
-                          <span className="font-semibold">{mentorSessionCount}</span> sessions
-                        </div>
-                        <button
-                          type="button"
-                          onClick={() => setSelectedMentorDetails(mentor)}
-                          className="shrink-0 inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-2 text-xs font-bold text-white hover:bg-indigo-700 transition-colors"
-                        >
-                          <Eye className="w-3.5 h-3.5" /> View Details
+                        <button type="button" onClick={() => setSelectedMentorDetails(mentor)} className="shrink-0 text-xs font-semibold text-indigo-700 hover:text-indigo-900">
+                          Details →
                         </button>
                       </div>
 
@@ -1239,57 +1173,26 @@ export function CohortDetail() {
                         )}
                       </div>
                       </div>
-                    </CardBody>
+                    </div>
 
-                    {/* Footer: Login Activation */}
-                    <CardFooter className="py-3 px-5 bg-slate-50/50 justify-between items-center">
-                      <span className="text-[11px] font-medium text-slate-500">
-                        {!mentor.isLoginActive ? 'Login Pending' : !mentor.isAccountActive ? 'Account Inactive' : mentor.firstLoginPasswordReset ? 'Password setup pending' : 'Account Active'}
-                      </span>
-                      {!mentor.isLoginActive ? (
-                        <button
-                          onClick={() => {
-                            setTargetMentor(mentor);
-                            setIsActivateModalOpen(true);
-                          }}
-                          className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-lg text-xs font-bold flex items-center gap-1 shadow-xs transition-all"
-                        >
-                          <KeyRound className="w-3 h-3" />
-                          <span>Activate Login</span>
-                        </button>
-                      ) : (
-                        <button
-                          type="button"
-                          role="switch"
-                          aria-checked={mentor.isAccountActive}
-                          aria-label={`${mentor.isAccountActive ? 'Deactivate' : 'Activate'} mentor account`}
-                          onClick={() => toggleAccountMutation.mutate({ userId: mentor.userId, isActive: !mentor.isAccountActive })}
-                          disabled={toggleAccountMutation.isPending}
-                          className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors disabled:cursor-wait disabled:opacity-50 ${mentor.isAccountActive ? 'bg-emerald-600' : 'bg-slate-300'}`}
-                        >
-                          <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${mentor.isAccountActive ? 'translate-x-6' : 'translate-x-1'}`} />
-                        </button>
-                      )}
-                    </CardFooter>
                     {selectedMentorDetails?.id === mentor.id && (
                       <Modal
                         isOpen
                         onClose={() => setSelectedMentorDetails(null)}
                         title={`Mentor Details · ${mentor.name}`}
-                        maxWidth="max-w-4xl"
+                        fullScreen
                       >
                         <div className="space-y-5">
-                          <section className="grid sm:grid-cols-2 gap-3 rounded-xl bg-slate-50 border border-slate-100 p-4 text-sm">
+                          <section className="grid grid-cols-2 gap-x-6 gap-y-3 border-y border-slate-200 py-3 text-sm xl:grid-cols-5">
                             <div><span className="text-slate-500">Employee ID</span><p className="font-semibold text-slate-800">{mentor.employeeId || 'Not provided'}</p></div>
                             <div><span className="text-slate-500">Email</span><p className="font-semibold text-slate-800">{mentor.email}</p></div>
-                            <div><span className="text-slate-500">Department</span><p className="font-semibold text-slate-800">{mentor.department || 'Not provided'}</p></div>
                             <div><span className="text-slate-500">Login</span><p className="font-semibold text-slate-800">{!mentor.isLoginActive ? 'Not activated' : !mentor.isAccountActive ? 'Inactive' : mentor.firstLoginPasswordReset ? 'Password setup pending' : 'Active'}</p></div>
                             <div><span className="text-slate-500">Nominated by</span><p className="font-semibold text-slate-800">{mentor.nominatorName || 'Platform Administrator'}</p></div>
                             <div><span className="text-slate-500">Admission date</span><p className="font-semibold text-slate-800">{mentor.createdAt ? new Date(mentor.createdAt).toLocaleDateString() : 'Not provided'}</p></div>
                           </section>
 
                           {mentor.isLoginActive && mentor.userId && (
-                            <div className="flex flex-col gap-2 rounded-xl border border-amber-200 bg-amber-50 p-4 sm:flex-row sm:items-center sm:justify-between">
+                            <div className="flex flex-col gap-2 border-y border-amber-200 bg-amber-50/50 py-3 sm:flex-row sm:items-center sm:justify-between">
                               <div>
                                 <p className="text-sm font-bold text-amber-900">Mentor login credentials</p>
                                 <p className="mt-0.5 text-xs text-amber-800">Passwords are stored securely and cannot be viewed. Reset to generate a one-time temporary password.</p>
@@ -1312,40 +1215,22 @@ export function CohortDetail() {
                               <span className="text-xs font-semibold text-purple-700">{activeAssignedTrainees.length} active · {droppedOutAssignedTrainees} dropped out</span>
                             </div>
                             {assignedTrainees.length ? (
-                              <div className="grid md:grid-cols-2 gap-3">
-                                {assignedTrainees.map((trainee) => (
-                                  <div key={trainee.id} className="rounded-xl border border-slate-200 p-3">
-                                    <div className="flex items-start justify-between gap-3">
-                                      <div className="min-w-0">
-                                        <p className="font-bold text-sm text-slate-800 truncate">{trainee.name}</p>
-                                        <p className="text-xs text-slate-500 truncate">{trainee.email}</p>
-                                        <p className="text-xs text-slate-500 mt-1">ID: {trainee.employeeId || 'Not provided'} · {trainee.department || 'No department'}</p>
-                                        <p className="text-xs text-slate-500">Location: {trainee.location || 'Not provided'}</p>
-                                        {trainee.status === 'dropped_out' && <span className="mt-1 inline-flex rounded-full bg-rose-50 px-2 py-0.5 text-[10px] font-bold text-rose-700">Dropped out{trainee.droppedOutAt ? ` · ${new Date(trainee.droppedOutAt).toLocaleDateString()}` : ''}</span>}
-                                        {trainee.dropoutReason && <p className="text-xs text-rose-600">Reason: {trainee.dropoutReason}</p>}
-                                      </div>
-                                      <span className="shrink-0 text-xs font-bold text-emerald-700">{trainee.percentComplete || 0}%</span>
-                                    </div>
-                                    <ProgressBar percent={trainee.percentComplete || 0} size="sm" showLabel={false} />
-                                    <button
-                                      type="button"
-                                      onClick={() => {
-                                        setSelectedTraineeForFeedback({
-                                          ...trainee,
-                                          mentorName: mentor.name,
-                                          mentorEmployeeId: mentor.employeeId,
-                                          mentorEmail: mentor.email,
-                                          mentorDepartment: mentor.department,
-                                          mentorNominatedBy: mentor.nominatorName,
-                                        });
-                                        setIsTraineeFeedbackModalOpen(true);
-                                      }}
-                                      className="mt-3 text-xs font-bold text-purple-700 hover:text-purple-900 inline-flex items-center gap-1"
-                                    >
-                                      <Eye className="w-3.5 h-3.5" /> Trainee details & feedback
-                                    </button>
-                                  </div>
-                                ))}
+                              <div className="overflow-x-auto border-y border-slate-200">
+                                <table className="w-full min-w-[900px] text-left text-sm">
+                                  <thead className="bg-slate-50 text-[11px] font-semibold uppercase tracking-wide text-slate-500"><tr><th className="px-3 py-2">Trainee</th><th className="px-3 py-2">Employee ID</th><th className="px-3 py-2">Location</th><th className="px-3 py-2">Progress</th><th className="px-3 py-2">Status</th><th className="px-3 py-2 text-right">Details</th></tr></thead>
+                                  <tbody className="divide-y divide-slate-100">
+                                    {assignedTrainees.map((trainee) => (
+                                      <tr key={trainee.id} className="hover:bg-slate-50/70">
+                                        <td className="px-3 py-2"><p className="font-semibold text-slate-800">{trainee.name}</p><p className="text-xs text-slate-500">{trainee.email}</p></td>
+                                        <td className="px-3 py-2 text-xs text-slate-600">{trainee.employeeId || '—'}{trainee.department ? ` · ${trainee.department}` : ''}</td>
+                                        <td className="px-3 py-2 text-xs text-slate-600">{trainee.location || 'Not provided'}</td>
+                                        <td className="px-3 py-2"><div className="flex items-center gap-2"><div className="h-1 w-20 overflow-hidden rounded bg-slate-200"><div className="h-full bg-emerald-600" style={{ width: `${Math.max(0, Math.min(100, Number(trainee.percentComplete) || 0))}%` }} /></div><span className="text-xs tabular-nums text-slate-700">{trainee.percentComplete || 0}%</span></div></td>
+                                        <td className={`px-3 py-2 text-xs font-semibold ${trainee.status === 'dropped_out' ? 'text-rose-700' : 'text-emerald-700'}`}>{trainee.status === 'dropped_out' ? `Dropped out${trainee.droppedOutAt ? ` · ${new Date(trainee.droppedOutAt).toLocaleDateString()}` : ''}` : 'Active'}{trainee.dropoutReason && <p className="font-normal text-rose-600">{trainee.dropoutReason}</p>}</td>
+                                        <td className="px-3 py-2 text-right"><button type="button" onClick={() => { setSelectedTraineeForFeedback({ ...trainee, mentorName: mentor.name, mentorEmployeeId: mentor.employeeId, mentorEmail: mentor.email, mentorDepartment: mentor.department, mentorNominatedBy: mentor.nominatorName }); setIsTraineeFeedbackModalOpen(true); }} className="text-xs font-semibold text-purple-700 hover:text-purple-900">Details & feedback →</button></td>
+                                      </tr>
+                                    ))}
+                                  </tbody>
+                                </table>
                               </div>
                             ) : <p className="text-sm text-slate-500">No trainees assigned.</p>}
                           </section>
@@ -1358,25 +1243,25 @@ export function CohortDetail() {
                             {cohortSessionOverviewLoading ? (
                               <p className="text-sm text-slate-500">Loading group and session details…</p>
                             ) : mentorBatches.length ? (
-                              <div className="space-y-3">
+                              <div className="divide-y divide-slate-200 border-y border-slate-200">
                                 {mentorBatches.map((batch) => (
-                                  <div key={batch.id} className="rounded-xl border border-emerald-100 bg-emerald-50/40 p-4">
+                                  <div key={batch.id} className="py-3">
                                     <div className="flex items-center justify-between gap-3">
                                       <h5 className="font-bold text-slate-800">{batch.name}</h5>
                                       <span className="text-xs text-slate-500">{batch.traineeCount} trainees</span>
                                     </div>
-                                    <div className="mt-2 grid sm:grid-cols-2 gap-2">
+                                    <div className="mt-2 divide-y divide-slate-100 border-y border-slate-100">
                                       {batch.trainees.map((trainee) => (
-                                        <div key={trainee.traineeId} className="rounded-lg bg-white px-3 py-2 text-xs">
-                                          <p className="font-semibold text-slate-700">{trainee.name}{trainee.status === 'dropped_out' && <span className="ml-2 rounded-full bg-rose-50 px-1.5 py-0.5 text-[10px] font-bold text-rose-700">Dropped out</span>}</p>
-                                          <p className="text-slate-500">{trainee.email}</p>
-                                          <p className="text-slate-500">Location: {trainee.location || 'Not provided'}</p>
+                                        <div key={trainee.traineeId} className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 py-1.5 text-xs">
+                                          <span className="font-semibold text-slate-700">{trainee.name}{trainee.status === 'dropped_out' && <span className="ml-2 text-rose-700">Dropped out</span>}</span>
+                                          <span className="text-slate-500">{trainee.email}</span>
+                                          <span className="text-slate-500">{trainee.location || 'Location not provided'}</span>
                                         </div>
                                       ))}
                                     </div>
-                                    <div className="mt-3 space-y-2">
+                                    <div className="mt-2 divide-y divide-slate-100">
                                       {batch.sessions.length ? batch.sessions.map((session) => (
-                                        <div key={session.id} className="rounded-lg border border-slate-200 bg-white p-3">
+                                        <div key={session.id} className="py-2">
                                           <div className="flex flex-wrap items-start justify-between gap-2">
                                             <div>
                                               <p className="font-bold text-sm text-slate-800">{session.title}</p>
@@ -1406,7 +1291,7 @@ export function CohortDetail() {
                         </div>
                       </Modal>
                     )}
-                  </Card>
+                  </section>
                 );
               })}
             </div>
@@ -1424,10 +1309,56 @@ export function CohortDetail() {
             </p>
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-5">
-            {traineesData?.items?.map((trainee) => {
+          <div className="grid grid-cols-1 gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3 md:grid-cols-[minmax(220px,1fr)_minmax(220px,1fr)_220px]">
+            <label className="relative block">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <input
+                type="search"
+                value={assignmentTraineeSearch}
+                onChange={(event) => setAssignmentTraineeSearch(event.target.value)}
+                placeholder="Search trainees by name, ID, email, or location"
+                className="w-full rounded-lg border border-slate-200 bg-white py-2 pl-9 pr-3 text-xs outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
+              />
+            </label>
+            <label className="relative block">
+              <Search className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-slate-400" />
+              <input
+                type="search"
+                value={assignmentMentorSearch}
+                onChange={(event) => setAssignmentMentorSearch(event.target.value)}
+                placeholder="Find a mentor in assignment menus"
+                className="w-full rounded-lg border border-slate-200 bg-white py-2 pl-9 pr-3 text-xs outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
+              />
+            </label>
+            <select
+              aria-label="Filter trainees by assigned mentor"
+              value={assignmentMentorFilter}
+              onChange={(event) => setAssignmentMentorFilter(event.target.value)}
+              className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2 text-xs font-medium text-slate-700 focus:border-emerald-500 focus:outline-none focus:ring-2 focus:ring-emerald-100"
+            >
+              <option value="ALL">All mentors</option>
+              <option value="UNASSIGNED">Unassigned trainees</option>
+              {assignmentMentors.map((mentor) => (
+                <option key={mentor.id} value={mentor.id}>{mentor.name}{!mentor.isAccountActive && mentor.isLoginActive ? ' · Deactivated' : ''}</option>
+              ))}
+            </select>
+          </div>
+
+          <div className="overflow-x-auto border-y border-slate-200">
+            <table className="w-full min-w-[980px] text-left text-sm">
+              <thead className="bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                <tr>
+                  <th className="px-4 py-3">Trainee</th>
+                  <th className="px-4 py-3">Location</th>
+                  <th className="px-4 py-3">Progress</th>
+                  <th className="px-4 py-3">Status</th>
+                  <th className="px-4 py-3">Assigned mentor</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-slate-200">
+            {filteredAssignmentTrainees.map((trainee) => {
               const currentMentorId = trainee.mentorId || '';
-              const cohortMentors = mentorsData?.items || [];
+              const cohortMentors = assignmentMentors;
               const assignedMentor = cohortMentors.find((mentor) => mentor.id === currentMentorId);
               const assignedMentorIsDeactivated = Boolean(
                 assignedMentor?.isLoginActive && !assignedMentor?.isAccountActive
@@ -1437,28 +1368,20 @@ export function CohortDetail() {
               );
 
               return (
-                <Card key={trainee.id} className="flex flex-col justify-between">
-                  <CardBody className="p-5">
-                    <div className="flex justify-between items-start mb-2">
-                      <div>
-                        <h4 className="font-bold text-slate-800 text-sm">{trainee.name}</h4>
-                        <p className="text-xs text-slate-500">{trainee.department} &bull; {trainee.employeeId}</p>
-                        <p className="text-xs text-slate-500 mt-1">{trainee.email}</p>
-                        {trainee.location && <p className="text-xs text-slate-500 mt-1">{trainee.location}</p>}
-                      </div>
-                      {trainee.status === 'dropped_out' ? (
-                        <Badge variant="danger">Dropped Out</Badge>
-                      ) : (
-                        <Badge variant={trainee.mentorId ? 'active' : 'draft'}>
-                          {trainee.mentorId ? 'Assigned' : 'Unassigned'}
-                        </Badge>
-                      )}
-                    </div>
-
-                    <div className="mt-4 pt-3 border-t border-slate-100">
-                      <label className="block text-xs font-bold text-slate-600 mb-1.5">
-                        Assigned Mentor
-                      </label>
+                    <tr key={trainee.id} className="align-top hover:bg-slate-50/70">
+                      <th scope="row" className="px-4 py-3 font-semibold text-slate-900">
+                        {trainee.name}
+                        <p className="mt-0.5 text-xs font-normal text-slate-500">{trainee.employeeId || '—'} · {trainee.email}</p>
+                        <p className="mt-0.5 text-xs font-normal text-slate-500">{trainee.department || '—'}</p>
+                      </th>
+                      <td className="px-4 py-3 text-slate-600">{trainee.location || '—'}{trainee.timezone ? <p className="mt-0.5 text-xs text-slate-500">{trainee.timezone}</p> : null}</td>
+                      <td className="px-4 py-3"><div className="w-28"><ProgressBar percent={trainee.percentComplete || 0} size="sm" /></div></td>
+                      <td className="px-4 py-3">
+                        <span className={`text-xs font-semibold ${trainee.status === 'dropped_out' ? 'text-rose-700' : trainee.mentorId ? 'text-emerald-700' : 'text-amber-700'}`}>
+                          {trainee.status === 'dropped_out' ? 'Dropped out' : trainee.mentorId ? 'Assigned' : 'Unassigned'}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3">
                       <select
                         value={currentMentorId}
                         disabled={trainee.status === 'dropped_out'}
@@ -1468,7 +1391,7 @@ export function CohortDetail() {
                             assignMentorMutation.mutate({ traineeId: trainee.id, mentorId });
                           }
                         }}
-                        className="w-full px-3 py-2 text-xs font-semibold rounded-xl border border-slate-200 bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500 disabled:cursor-not-allowed disabled:bg-slate-100"
+                        className="w-72 max-w-full px-3 py-2 text-xs font-semibold rounded-lg border border-slate-200 bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500 disabled:cursor-not-allowed disabled:bg-slate-100"
                       >
                         <option value="">-- Select a Mentor --</option>
                         {assignedMentorIsDeactivated && (
@@ -1476,27 +1399,23 @@ export function CohortDetail() {
                             {assignedMentor.name} ({assignedMentor.employeeId || 'EMP'}) · Deactivated (currently assigned)
                           </option>
                         )}
-                        {assignableMentors.map((m) => (
+                        {assignableMentors.filter((mentor) => mentor.id === currentMentorId || mentorOptionsForAssignment.some((option) => option.id === mentor.id)).map((m) => (
                           <option key={m.id} value={m.id}>
                             {m.name} ({m.employeeId || 'EMP'}) &bull; {m.assignedTraineesCount} trainees
                           </option>
                         ))}
                       </select>
-                      {assignedMentorIsDeactivated && trainee.status !== 'dropped_out' && (
-                        <p className="mt-2 text-xs font-semibold text-amber-700">
-                          This trainee is currently assigned to a deactivated mentor. Select an active mentor to reassign them.
-                        </p>
-                      )}
-                      {trainee.status === 'dropped_out' && <p className="mt-2 text-xs font-semibold text-rose-600">Dropped out — mentor assignment is closed.</p>}
-                    </div>
-
-                    <div className="mt-4">
-                      <ProgressBar percent={trainee.percentComplete || 0} size="sm" />
-                    </div>
-                  </CardBody>
-                </Card>
+                      {assignedMentorIsDeactivated && trainee.status !== 'dropped_out' && <p className="mt-1 max-w-xs text-xs text-amber-700">Currently assigned to a deactivated mentor. Choose an active mentor to reassign.</p>}
+                      {trainee.status === 'dropped_out' && <p className="mt-1 text-xs text-rose-600">Assignment closed</p>}
+                      </td>
+                    </tr>
               );
             })}
+                {!filteredAssignmentTrainees.length && (
+                  <tr><td colSpan="5" className="px-4 py-10 text-center text-sm text-slate-500">No trainees match these search and filter settings.</td></tr>
+                )}
+              </tbody>
+            </table>
           </div>
         </div>
       )}
@@ -1519,32 +1438,26 @@ export function CohortDetail() {
           </div>
 
           {/* Courses List */}
-          <div className="space-y-2">
+          <div>
             {cohort?.talentnextCourses && cohort.talentnextCourses.length > 0 ? (
-              cohort.talentnextCourses.map((assignment, idx) => (
-                <Card key={idx} className="border-slate-200">
-                  <CardBody className="p-4 flex items-center justify-between gap-4">
-                    <div className="flex-1 min-w-0">
-                      <div className="flex items-center gap-2">
-                        <span className="text-sm font-bold text-slate-800">
-                          {courseNameMap[assignment.courseId] || `Course (${assignment.courseId.substring(0, 8)}...)`}
-                        </span>
-                        <Badge variant={assignment.isMandatory ? 'danger' : 'info'}>
-                          {assignment.isMandatory ? 'Mandatory' : 'Optional'}
-                        </Badge>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-2 shrink-0">
+              <div className="overflow-x-auto border-y border-slate-200">
+                <table className="w-full text-left text-sm">
+                  <thead className="bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-500"><tr><th className="px-4 py-3">Course</th><th className="px-4 py-3">Requirement</th><th className="px-4 py-3 text-right">Actions</th></tr></thead>
+                  <tbody className="divide-y divide-slate-200">
+                  {cohort.talentnextCourses.map((assignment, idx) => (
+                    <tr key={assignment.courseId || idx} className="hover:bg-slate-50/70">
+                      <th scope="row" className="px-4 py-3 font-semibold text-slate-900">{courseNameMap[assignment.courseId] || `Course (${assignment.courseId.substring(0, 8)}...)`}</th>
+                      <td className="px-4 py-3 text-slate-700">{assignment.isMandatory ? 'Mandatory' : 'Optional'}</td>
+                      <td className="px-4 py-3 text-right">
                       <button
                         onClick={() => {
                           setEditingCourseId(assignment.courseId);
                           setSelectedCourseMandatory(assignment.isMandatory);
                           setIsTalentNextModalOpen(true);
                         }}
-                        className="p-2 rounded-lg text-slate-400 hover:text-slate-600 hover:bg-slate-100 transition-colors"
-                        title="Edit course"
+                        className="mr-3 text-xs font-semibold text-slate-600 hover:text-slate-900"
                       >
-                        <Edit3 className="w-4 h-4" />
+                        Edit
                       </button>
                       <button
                         onClick={() => {
@@ -1562,15 +1475,16 @@ export function CohortDetail() {
                             }
                           );
                         }}
-                        className="p-2 rounded-lg text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
-                        title="Remove course"
+                        className="text-xs font-semibold text-rose-700 hover:text-rose-900"
                       >
-                        <Trash2 className="w-4 h-4" />
+                        Remove
                       </button>
-                    </div>
-                  </CardBody>
-                </Card>
-              ))
+                      </td>
+                    </tr>
+                  ))}
+                  </tbody>
+                </table>
+              </div>
             ) : (
               <EmptyState
                 icon={BookOpen}
@@ -1608,7 +1522,7 @@ export function CohortDetail() {
           </div>
 
           {cohortNominatorsLoading ? (
-            <div className="grid grid-cols-1 gap-5 md:grid-cols-2 lg:grid-cols-3"><SkeletonCard count={3} /></div>
+            <div className="divide-y divide-slate-200 border-y border-slate-200">{[1, 2, 3].map((row) => <div key={row} className="h-14 animate-pulse bg-slate-50" />)}</div>
           ) : cohortNominators.length === 0 ? (
             <EmptyState
               icon={UserCheck}
@@ -1621,47 +1535,39 @@ export function CohortDetail() {
               )}
             />
           ) : (
-            <div className="grid grid-cols-1 gap-5 md:grid-cols-2 lg:grid-cols-3">
-              {cohortNominators.map((nominator) => (
-                <Card key={nominator.id} hover onClick={() => setSelectedNominatorDetails(nominator)}>
-                  <CardBody className="p-5">
-                    <div className="flex items-start justify-between gap-3">
-                      <div className="min-w-0">
-                        <h3 className="truncate text-sm font-bold text-slate-900">{nominator.name}</h3>
-                        <div className="mt-1 flex items-center gap-1.5 text-xs text-slate-500"><Mail className="h-3.5 w-3.5 shrink-0" /><span className="truncate">{nominator.email}</span></div>
-                      </div>
-                      <Badge variant={!nominator.isActive || nominator.firstLoginPasswordReset ? 'draft' : 'active'}>
-                        {!nominator.isActive ? 'Account inactive' : nominator.firstLoginPasswordReset ? 'Password setup pending' : 'Login active'}
-                      </Badge>
-                    </div>
-                    <div className="mt-4 flex items-center justify-between border-t border-slate-100 pt-3 text-xs">
-                      <span className="text-slate-500">Employee ID</span>
-                      <span className="font-semibold text-slate-700">{nominator.employeeId || '—'}</span>
-                    </div>
-                    <p className="mt-3 text-xs font-bold text-emerald-700">View nominated mentors and trainees →</p>
-                  </CardBody>
-                  <CardFooter className="py-3 px-5 bg-slate-50/50">
-                    <span className={`text-xs font-semibold ${nominator.isActive ? 'text-emerald-700' : 'text-rose-700'}`}>
-                      {nominator.isActive ? 'Account Active' : 'Account Inactive'}
-                    </span>
-                    <button
-                      type="button"
-                      role="switch"
-                      aria-checked={nominator.isActive}
-                      aria-label={`${nominator.isActive ? 'Deactivate' : 'Activate'} nominator account`}
-                      onKeyDown={(event) => event.stopPropagation()}
-                      onClick={(event) => {
-                        event.stopPropagation();
-                        toggleAccountMutation.mutate({ userId: nominator.id, isActive: !nominator.isActive });
-                      }}
-                      disabled={toggleAccountMutation.isPending}
-                      className={`relative inline-flex h-6 w-11 shrink-0 items-center rounded-full transition-colors disabled:cursor-wait disabled:opacity-50 ${nominator.isActive ? 'bg-emerald-600' : 'bg-slate-300'}`}
-                    >
-                      <span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${nominator.isActive ? 'translate-x-6' : 'translate-x-1'}`} />
-                    </button>
-                  </CardFooter>
-                </Card>
-              ))}
+            <div className="overflow-x-auto border-y border-slate-200">
+              <table className="w-full min-w-[760px] text-left text-sm">
+                <thead className="bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  <tr><th className="px-4 py-3">Nominator</th><th className="px-4 py-3">Employee ID</th><th className="px-4 py-3">Account</th><th className="px-4 py-3">Access</th><th className="px-4 py-3 text-right">Nominations</th></tr>
+                </thead>
+                <tbody className="divide-y divide-slate-200">
+                  {cohortNominators.map((nominator) => (
+                    <tr key={nominator.id} className="hover:bg-slate-50/70">
+                      <th scope="row" className="px-4 py-3 font-semibold text-slate-900">
+                        {nominator.name}<p className="mt-0.5 text-xs font-normal text-slate-500">{nominator.email}</p>
+                      </th>
+                      <td className="px-4 py-3 text-slate-700">{nominator.employeeId || '—'}</td>
+                      <td className="px-4 py-3">
+                        <span className={`text-xs font-semibold ${!nominator.isActive ? 'text-rose-700' : nominator.firstLoginPasswordReset ? 'text-amber-700' : 'text-emerald-700'}`}>
+                          {!nominator.isActive ? 'Inactive' : nominator.firstLoginPasswordReset ? 'Password setup pending' : 'Active'}
+                        </span>
+                      </td>
+                      <td className="px-4 py-3">
+                        <button
+                          type="button"
+                          role="switch"
+                          aria-checked={nominator.isActive}
+                          aria-label={`${nominator.isActive ? 'Deactivate' : 'Activate'} ${nominator.name}`}
+                          onClick={() => toggleAccountMutation.mutate({ userId: nominator.id, isActive: !nominator.isActive })}
+                          disabled={toggleAccountMutation.isPending}
+                          className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors disabled:cursor-wait disabled:opacity-50 ${nominator.isActive ? 'bg-emerald-600' : 'bg-slate-300'}`}
+                        ><span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${nominator.isActive ? 'translate-x-6' : 'translate-x-1'}`} /></button>
+                      </td>
+                      <td className="px-4 py-3 text-right"><button type="button" onClick={() => setSelectedNominatorDetails(nominator)} className="font-semibold text-emerald-700 hover:text-emerald-900">View nominees →</button></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           )}
         </div>
@@ -2627,6 +2533,7 @@ export function CohortDetail() {
           setSelectedTraineeForFeedback(null);
         }}
         title="Trainee Mentorship & Weekly Feedback Log"
+        fullScreen
       >
         {traineeFeedbackLoading ? (
           <div className="p-8 text-center text-xs text-slate-500 space-y-2">
@@ -2636,11 +2543,11 @@ export function CohortDetail() {
         ) : !traineeFeedbackDetail ? (
           <p className="text-xs text-slate-400 italic py-4 text-center">Unable to load trainee details.</p>
         ) : (
-          <div className="space-y-6">
+          <div className="space-y-5">
             {/* 1. Dual Overview Cards: Trainee Info & Mentor Info */}
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-x-8 divide-y divide-slate-200 border-y border-slate-200 xl:grid-cols-2 xl:divide-x xl:divide-y-0">
               {/* Trainee Card */}
-              <div className="p-4 rounded-2xl bg-gradient-to-br from-blue-50/70 via-white to-blue-50/30 border border-blue-100 shadow-2xs space-y-3">
+              <section className="space-y-2 py-3 xl:pr-6">
                 <div className="flex items-center justify-between">
                   <span className="text-[10px] font-bold uppercase tracking-wider text-blue-700 bg-blue-100/70 px-2 py-0.5 rounded-full">
                     Trainee Profile
@@ -2664,7 +2571,7 @@ export function CohortDetail() {
                 </div>
 
                 {/* Progress bar inside Trainee card */}
-                <div className="pt-2 border-t border-blue-100/80">
+                <div className="border-t border-slate-100 pt-2">
                   <div className="flex justify-between items-center text-xs mb-1">
                     <span className="font-semibold text-slate-600">Curriculum Completion</span>
                     <span className="font-bold text-emerald-600">
@@ -2676,10 +2583,10 @@ export function CohortDetail() {
                     {traineeFeedbackDetail.progress?.items?.filter(i => i.completed).length || 0} of {traineeFeedbackDetail.progress?.items?.length || 0} courses complete
                   </p>
                 </div>
-              </div>
+              </section>
 
               {/* Mentor Card */}
-              <div className="p-4 rounded-2xl bg-gradient-to-br from-purple-50/70 via-white to-purple-50/30 border border-purple-100 shadow-2xs space-y-3">
+              <section className="space-y-2 py-3 xl:pl-6">
                 <div className="flex items-center justify-between">
                   <span className="text-[10px] font-bold uppercase tracking-wider text-purple-700 bg-purple-100/70 px-2 py-0.5 rounded-full">
                     Assigned Mentor
@@ -2698,18 +2605,12 @@ export function CohortDetail() {
                   </p>
                 </div>
 
-                <div className="flex items-center gap-2 text-xs">
-                  <span className="bg-purple-100/80 text-purple-800 font-semibold px-2 py-0.5 rounded-md text-[11px]">
-                    {traineeFeedbackDetail.mentor?.department || selectedTraineeForFeedback?.mentorDepartment || 'Engineering'}
-                  </span>
-                  <span className="text-slate-400">&bull;</span>
-                  <span className="text-emerald-700 font-semibold text-[11px] flex items-center gap-1">
-                    <Check className="w-3 h-3 text-emerald-600" />
-                    <span>Active Mentor</span>
-                  </span>
-                </div>
+                <span className="text-emerald-700 font-semibold text-[11px] inline-flex items-center gap-1">
+                  <Check className="w-3 h-3 text-emerald-600" />
+                  <span>Active Mentor</span>
+                </span>
 
-                <div className="pt-2 border-t border-purple-100/80 text-[11px] space-y-1">
+                <div className="border-t border-slate-100 pt-2 text-[11px] space-y-1">
                   <div className="flex justify-between items-center text-slate-600">
                     <span>Nominated By:</span>
                     <span className="font-bold text-slate-800">
@@ -2723,7 +2624,7 @@ export function CohortDetail() {
                     </span>
                   </div>
                 </div>
-              </div>
+              </section>
             </div>
 
             {/* 2. TalentNext Courses Completion Status (Styled like Weekly Feedback) */}
@@ -2755,7 +2656,7 @@ export function CohortDetail() {
 
                 {/* Courses List - Collapsible */}
                 {expandedTalentNext && (
-                  <div className="space-y-2.5 max-h-96 overflow-y-auto pr-1">
+                  <div className="divide-y divide-slate-100 border-y border-slate-200">
                     {traineeFeedbackDetail.talentnextCourses.map((course) => {
                       const completionMap = traineeFeedbackDetail.talentnextProgress?.completionMap || {};
                       const courseCompletion = completionMap[course.id];
@@ -2764,14 +2665,14 @@ export function CohortDetail() {
                       return (
                         <div
                           key={course.id}
-                          className={`p-4 rounded-2xl border transition-all ${
+                          className={`flex items-center justify-between gap-4 py-2.5 transition-all ${
                             isCompleted
-                              ? 'bg-gradient-to-r from-emerald-50/50 via-white to-emerald-50/20 border-emerald-200 shadow-2xs'
-                              : 'bg-slate-50/70 border-slate-200'
+                              ? 'text-emerald-900'
+                              : 'text-slate-700'
                           }`}
                         >
-                          <div className="flex items-start gap-3">
-                            <div className={`w-6 h-6 rounded-lg flex items-center justify-center shrink-0 ${
+                          <div className="flex min-w-0 items-center gap-3">
+                            <div className={`h-5 w-5 rounded flex items-center justify-center shrink-0 ${
                               isCompleted
                                 ? 'bg-emerald-600 text-white'
                                 : 'border-2 border-slate-300 bg-white'
@@ -2793,7 +2694,7 @@ export function CohortDetail() {
                               </div>
                               <div className="flex items-center gap-2 flex-wrap">
                                 {course.isMandatory && (
-                                  <span className="text-[10px] font-bold text-amber-700 bg-amber-100 px-1.5 py-0.5 rounded border border-amber-200">
+                                  <span className="text-[10px] font-bold text-amber-700">
                                     MANDATORY
                                   </span>
                                 )}
@@ -2831,7 +2732,7 @@ export function CohortDetail() {
               </div>
 
               {/* Weeks List */}
-              <div className="space-y-3 max-h-[380px] overflow-y-auto pr-1">
+              <div className="divide-y divide-slate-200 border-y border-slate-200">
                 {Array.from({ length: traineeFeedbackDetail.plan?.totalWeeks || activePlan?.totalWeeks || 4 }, (_, i) => i + 1).map((wNum) => {
                   const fb = traineeFeedbackDetail.feedbackHistory?.find((f) => f.weekNumber === wNum);
                   const weekObj = traineeFeedbackDetail.plan?.weeks?.find(w => w.weekNumber === wNum);
@@ -2840,12 +2741,12 @@ export function CohortDetail() {
                   return (
                     <div
                       key={wNum}
-                      className={`p-4 rounded-2xl border transition-all ${
+                      className={`py-3 transition-all ${
                         fb 
-                          ? 'bg-gradient-to-r from-emerald-50/50 via-white to-emerald-50/20 border-emerald-200 shadow-2xs' 
+                          ? 'bg-emerald-50/30'
                           : isBuffer
-                          ? 'bg-amber-50/40 border-amber-200/80'
-                          : 'bg-slate-50/70 border-slate-200'
+                          ? 'bg-amber-50/30'
+                          : 'bg-transparent'
                       }`}
                     >
                       <div className="flex items-center justify-between gap-2 mb-2">
@@ -2894,19 +2795,19 @@ export function CohortDetail() {
                             const isRating = key.toLowerCase().includes('rating');
 
                             return (
-                              <div key={key} className="p-2.5 rounded-xl bg-slate-50 border border-slate-100 text-xs space-y-1">
+                          <div key={key} className="flex flex-wrap items-start justify-between gap-x-6 gap-y-1 border-b border-slate-100 py-2 text-xs last:border-0">
                                 <div className="flex justify-between items-center">
                                   <span className="text-slate-600 font-semibold capitalize">
                                     {key.replace(/_/g, ' ')}
                                   </span>
                                   {isRating && (
-                                    <span className="font-bold text-amber-700 bg-amber-100/70 px-2 py-0.5 rounded-md font-mono text-[11px]">
+                                  <span className="font-bold text-amber-700 font-mono text-[11px]">
                                       ★ {val} / 5
                                     </span>
                                   )}
                                 </div>
                                 {!isRating && (
-                                  <p className="text-slate-800 font-medium leading-relaxed bg-white p-2 rounded-lg border border-slate-200/80">
+                                  <p className="max-w-3xl text-slate-800 font-medium leading-relaxed">
                                     {String(val)}
                                   </p>
                                 )}
