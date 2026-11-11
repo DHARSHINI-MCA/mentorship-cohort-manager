@@ -118,9 +118,15 @@ Dropped-out trainees remain stored so cohort and attendance history can be repor
       durationHrs: Number?
     }]
   }],
+  talentnextCourses: [{
+    courseId: String,              // references talentnextCourses._id
+    isMandatory: Boolean
+  }],
   createdAt: Date
 }
 ```
+
+TalentNext assignments configured on a reusable template are copied into the cohort plan and cohort when that template is applied. The cohort copy can subsequently be managed independently.
 
 ### `feedbackTemplates` and `cohortFeedbackForms`
 

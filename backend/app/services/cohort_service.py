@@ -9,6 +9,61 @@ from app.schemas.cohorts import (
 
 class CohortService:
     @staticmethod
+    async def delete_cohort(db: AsyncIOMotorDatabase, cohort_id: str) -> bool:
+        try:
+            cohort_oid = ObjectId(cohort_id)
+        except Exception:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Cohort not found")
+
+        cohort = await db.cohorts.find_one({"_id": cohort_oid})
+        if not cohort:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Cohort not found")
+
+        # Cohort references exist as strings in legacy records and ObjectIds in newer ones.
+        cohort_values = [cohort_id, cohort_oid]
+        cohort_query = {"cohortId": {"$in": cohort_values}}
+        mentors = await db.mentors.find(cohort_query).to_list(None)
+        trainees = await db.trainees.find(cohort_query).to_list(None)
+        batches = await db.batches.find(cohort_query, {"_id": 1}).to_list(None)
+
+        batch_oids = [batch["_id"] for batch in batches]
+        sessions = await db.sessions.find({"batchId": {"$in": batch_oids}}, {"_id": 1}).to_list(None) if batch_oids else []
+        session_oids = [session["_id"] for session in sessions]
+        if session_oids:
+            await db.attendance.delete_many({"sessionId": {"$in": session_oids + [str(item) for item in session_oids]}})
+            await db.sessions.delete_many({"_id": {"$in": session_oids}})
+
+        trainee_refs = [value for trainee in trainees for value in (trainee["_id"], str(trainee["_id"]))]
+        related_queries = [{"cohortId": {"$in": cohort_values}}]
+        if trainee_refs:
+            related_queries.append({"traineeId": {"$in": trainee_refs}})
+        await db.progress.delete_many({"$or": related_queries})
+        await db.feedbackResponses.delete_many({"$or": related_queries})
+        if batch_oids:
+            await db.batches.delete_many({"_id": {"$in": batch_oids}})
+
+        await db.trainees.delete_many(cohort_query)
+        await db.mentors.delete_many(cohort_query)
+        await db.cohortTrainingPlans.delete_many(cohort_query)
+        await db.cohortFeedbackForms.delete_many(cohort_query)
+
+        # Remove mentor accounts only when they have no remaining mentor profile elsewhere.
+        mentor_user_ids = {mentor.get("userId") for mentor in mentors if mentor.get("userId")}
+        for user_id in mentor_user_ids:
+            try:
+                user_oid = ObjectId(str(user_id))
+            except Exception:
+                continue
+            other_profile = await db.mentors.find_one({"userId": str(user_id)})
+            if not other_profile:
+                other_profile = await db.mentors.find_one({"userId": user_oid})
+            if not other_profile:
+                await db.users.delete_one({"_id": user_oid, "role": "mentor"})
+
+        await db.cohorts.delete_one({"_id": cohort_oid})
+        return True
+
+    @staticmethod
     async def create_cohort(db: AsyncIOMotorDatabase, data: CohortCreate, created_by: str) -> dict:
         raw_data = data.model_dump()
         training_tpl_id = raw_data.pop("trainingTemplateId", None)
@@ -31,6 +86,11 @@ class CohortService:
         new_plan_id = None
         plan_weeks = []
         if custom_plan:
+            raw_data["talentnextCourses"] = custom_plan.get("talentnextCourses", raw_data.get("talentnextCourses", []))
+            await db.cohorts.update_one(
+                {"_id": ObjectId(cohort_id)},
+                {"$set": {"talentnextCourses": raw_data["talentnextCourses"]}}
+            )
             for w in custom_plan.get("weeks", []):
                 courses = []
                 for c in w.get("courses", []):
@@ -50,6 +110,7 @@ class CohortService:
                 "name": custom_plan.get("name", f"{raw_data['name']} Plan"),
                 "totalWeeks": custom_plan.get("totalWeeks", len(plan_weeks)),
                 "weeks": plan_weeks,
+                "talentnextCourses": custom_plan.get("talentnextCourses", raw_data.get("talentnextCourses", [])),
                 "createdAt": datetime.now(timezone.utc)
             }
             res_p = await db.cohortTrainingPlans.insert_one(plan_doc)
@@ -57,6 +118,12 @@ class CohortService:
         elif training_tpl_id:
             tpl = await db.trainingTemplates.find_one({"_id": ObjectId(training_tpl_id)})
             if tpl:
+                # Template-level TalentNext assignments become the cohort's assigned courses.
+                raw_data["talentnextCourses"] = tpl.get("talentnextCourses", raw_data.get("talentnextCourses", []))
+                await db.cohorts.update_one(
+                    {"_id": ObjectId(cohort_id)},
+                    {"$set": {"talentnextCourses": raw_data["talentnextCourses"]}}
+                )
                 for w in tpl.get("weeks", []):
                     courses = []
                     for c in w.get("courses", []):
@@ -76,6 +143,7 @@ class CohortService:
                     "name": tpl.get("name"),
                     "totalWeeks": tpl.get("totalWeeks", len(plan_weeks)),
                     "weeks": plan_weeks,
+                    "talentnextCourses": tpl.get("talentnextCourses", []),
                     "createdAt": datetime.now(timezone.utc)
                 }
                 res_p = await db.cohortTrainingPlans.insert_one(plan_doc)
@@ -282,6 +350,10 @@ class CohortService:
             )
         
         # Deep copy training template into cohortTrainingPlans
+        await db.cohorts.update_one(
+            {"_id": ObjectId(cohort_id)},
+            {"$set": {"talentnextCourses": training_tpl.get("talentnextCourses", [])}}
+        )
         plan_weeks = []
         for week in training_tpl.get("weeks", []):
             plan_courses = []
@@ -303,6 +375,7 @@ class CohortService:
             "name": training_tpl.get("name"),
             "totalWeeks": training_tpl.get("totalWeeks", len(plan_weeks)),
             "weeks": plan_weeks,
+            "talentnextCourses": training_tpl.get("talentnextCourses", []),
             "createdAt": datetime.now(timezone.utc)
         }
         plan_res = await db.cohortTrainingPlans.insert_one(plan_doc)

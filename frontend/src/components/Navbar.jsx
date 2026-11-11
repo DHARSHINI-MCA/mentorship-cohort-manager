@@ -1,8 +1,7 @@
 import React from 'react';
 import { Link, useLocation } from 'react-router-dom';
 import { useAuth } from '../context/AuthContext';
-import { Badge } from './Badge';
-import { GraduationCap, LogOut } from 'lucide-react';
+import { GraduationCap, LogOut, ChevronRight } from 'lucide-react';
 
 export function Navbar() {
   const { user, role, logout } = useAuth();
@@ -10,136 +9,82 @@ export function Navbar() {
 
   const isActive = (path) => location.pathname === path || location.pathname.startsWith(`${path}/`);
 
+  const roleMeta = {
+    admin: { label: 'Admin', color: 'bg-indigo-100 text-indigo-700' },
+    mentor: { label: 'Mentor', color: 'bg-blue-100 text-blue-700' },
+    nominator: { label: 'Nominator', color: 'bg-purple-100 text-purple-700' },
+  };
+  const meta = roleMeta[role] || { label: role, color: 'bg-slate-100 text-slate-600' };
+
   return (
-    <header className="sticky top-0 z-40 bg-white/95 backdrop-blur border-b border-slate-200/80 shadow-xs">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex items-center justify-between h-16">
-          
-          {/* Logo / Title */}
-          <div className="flex items-center gap-8">
-            <Link to="/" className="flex items-center gap-2.5 group">
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-emerald-600 to-teal-500 flex items-center justify-center text-white shadow-md shadow-emerald-500/20 group-hover:scale-105 transition-transform">
-                <GraduationCap className="w-5 h-5" />
+    <header className="sticky top-0 z-40 bg-white border-b border-slate-200">
+      <div className="max-w-screen-2xl mx-auto px-4 sm:px-6">
+        <div className="flex items-center justify-between h-11">
+
+          {/* Logo */}
+          <div className="flex items-center gap-6">
+            <Link to="/" className="flex items-center gap-2 shrink-0">
+              <div className="w-6 h-6 rounded bg-emerald-600 flex items-center justify-center text-white">
+                <GraduationCap className="w-3.5 h-3.5" />
               </div>
-              <div>
-                <span className="font-extrabold text-base tracking-tight text-slate-800 block">
-                  Cohort<span className="text-emerald-600">Manager</span>
-                </span>
-                <span className="text-[10px] text-slate-400 font-semibold uppercase tracking-wider block -mt-0.5">
-                  Mentorship Hub
-                </span>
-              </div>
+              <span className="font-bold text-sm text-slate-800 tracking-tight">
+                Cohort<span className="text-emerald-600">Manager</span>
+              </span>
             </Link>
 
-            {/* Nav Links based on Role */}
-            <nav className="hidden md:flex items-center gap-1">
+            {/* Nav Links */}
+            <nav className="hidden md:flex items-center gap-0 border-l border-slate-200 pl-6">
               {role === 'admin' && (
                 <>
-                  <Link
-                    to="/admin/cohorts"
-                    className={`px-3.5 py-2 rounded-xl text-sm font-semibold transition-all ${
-                      isActive('/admin/cohorts')
-                        ? 'bg-slate-100 text-slate-900'
-                        : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
-                    }`}
-                  >
-                    Cohorts
-                  </Link>
-                  <Link
-                    to="/admin/nominations"
-                    className={`px-3.5 py-2 rounded-xl text-sm font-semibold transition-all ${
-                      isActive('/admin/nominations')
-                        ? 'bg-slate-100 text-slate-900'
-                        : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
-                    }`}
-                  >
-                    Nominations
-                  </Link>
-                  <Link
-                    to="/admin/training-templates"
-                    className={`px-3.5 py-2 rounded-xl text-sm font-semibold transition-all ${
-                      isActive('/admin/training-templates')
-                        ? 'bg-slate-100 text-slate-900'
-                        : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
-                    }`}
-                  >
-                    Training Plans
-                  </Link>
-                  <Link
-                    to="/admin/feedback-templates"
-                    className={`px-3.5 py-2 rounded-xl text-sm font-semibold transition-all ${
-                      isActive('/admin/feedback-templates')
-                        ? 'bg-slate-100 text-slate-900'
-                        : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
-                    }`}
-                  >
-                    Feedback Forms
-                  </Link>
-                  <Link
-                    to="/admin/reports"
-                    className={`px-3.5 py-2 rounded-xl text-sm font-semibold transition-all ${
-                      isActive('/admin/reports')
-                        ? 'bg-slate-100 text-slate-900'
-                        : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
-                    }`}
-                  >
-                    Reports
-                  </Link>
+                  {[
+                    { to: '/admin/cohorts', label: 'Cohorts' },
+                    { to: '/admin/training-templates', label: 'Training Plans' },
+                    { to: '/admin/feedback-templates', label: 'Feedback Forms' },
+                    { to: '/admin/reports', label: 'Reports' },
+                  ].map(({ to, label }) => (
+                    <Link
+                      key={to}
+                      to={to}
+                      className={`px-3 py-1 text-xs font-semibold transition-colors ${
+                        isActive(to)
+                          ? 'text-slate-900 border-b-2 border-emerald-600'
+                          : 'text-slate-500 hover:text-slate-800'
+                      }`}
+                    >
+                      {label}
+                    </Link>
+                  ))}
                 </>
               )}
-
               {role === 'mentor' && (
                 <>
-                  <Link
-                    to="/mentor/dashboard"
-                    className={`px-3.5 py-2 rounded-xl text-sm font-semibold transition-all ${
-                      isActive('/mentor/dashboard')
-                        ? 'bg-slate-100 text-slate-900'
-                        : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
-                    }`}
-                  >
-                    My Trainees
-                  </Link>
-                  <Link
-                    to="/mentor/plan"
-                    className={`px-3.5 py-2 rounded-xl text-sm font-semibold transition-all ${
-                      isActive('/mentor/plan')
-                        ? 'bg-slate-100 text-slate-900'
-                        : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
-                    }`}
-                  >
-                    Allocated Training Plan
-                  </Link>
-                  <Link
-                    to="/mentor/batches"
-                    className={`px-3.5 py-2 rounded-xl text-sm font-semibold transition-all ${
-                      isActive('/mentor/batches')
-                        ? 'bg-slate-100 text-slate-900'
-                        : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
-                    }`}
-                  >
-                    My Batches
-                  </Link>
-                  <Link
-                    to="/mentor/sessions"
-                    className={`px-3.5 py-2 rounded-xl text-sm font-semibold transition-all ${
-                      isActive('/mentor/sessions')
-                        ? 'bg-slate-100 text-slate-900'
-                        : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
-                    }`}
-                  >
-                    Session History
-                  </Link>
+                  {[
+                    { to: '/mentor/dashboard', label: 'Trainees' },
+                    { to: '/mentor/plan', label: 'Training Plan' },
+                    { to: '/mentor/batches', label: 'Batches' },
+                    { to: '/mentor/sessions', label: 'Sessions' },
+                  ].map(({ to, label }) => (
+                    <Link
+                      key={to}
+                      to={to}
+                      className={`px-3 py-1 text-xs font-semibold transition-colors ${
+                        isActive(to)
+                          ? 'text-slate-900 border-b-2 border-emerald-600'
+                          : 'text-slate-500 hover:text-slate-800'
+                      }`}
+                    >
+                      {label}
+                    </Link>
+                  ))}
                 </>
               )}
-
               {role === 'nominator' && (
                 <Link
-                  to="/nominator/dashboard"
-                  className={`px-3.5 py-2 rounded-xl text-sm font-semibold transition-all ${
-                    isActive('/nominator/dashboard')
-                      ? 'bg-slate-100 text-slate-900'
-                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                  to="/nominator/cohorts"
+                  className={`px-3 py-1 text-xs font-semibold transition-colors ${
+                    isActive('/nominator/cohorts')
+                      ? 'text-slate-900 border-b-2 border-emerald-600'
+                      : 'text-slate-500 hover:text-slate-800'
                   }`}
                 >
                   Nominations
@@ -148,29 +93,21 @@ export function Navbar() {
             </nav>
           </div>
 
-          {/* User Profile & Logout */}
+          {/* User identity */}
           <div className="flex items-center gap-3">
-            <div className="flex items-center gap-2.5 pl-3 border-l border-slate-200">
-              <div className="text-right hidden sm:block">
-                <div className="text-xs font-bold text-slate-800 leading-tight">
-                  {user?.name || 'User'}
-                </div>
-                <div className="text-[11px] text-slate-500">{user?.email}</div>
-              </div>
-              <Badge variant={role} size="sm">
-                {role}
-              </Badge>
-            </div>
-
+            <span className={`text-[11px] font-bold px-2 py-0.5 rounded ${meta.color}`}>
+              {meta.label}
+            </span>
+            <span className="text-xs text-slate-700 font-semibold hidden sm:block">{user?.name}</span>
+            <span className="text-[11px] text-slate-400 hidden sm:block">{user?.email}</span>
             <button
               onClick={logout}
               title="Sign out"
-              className="p-2 rounded-xl text-slate-400 hover:text-rose-600 hover:bg-rose-50 transition-colors"
+              className="text-slate-400 hover:text-rose-600 transition-colors p-1"
             >
-              <LogOut className="w-5 h-5" />
+              <LogOut className="w-4 h-4" />
             </button>
           </div>
-
         </div>
       </div>
     </header>

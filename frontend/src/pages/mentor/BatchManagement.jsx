@@ -401,45 +401,33 @@ export default function BatchManagement() {
               </div>
             </Card>
           ) : (
-            <div className="batches-grid">
-              {batches.map((batch) => (
-                <Card key={batch.id} clickable>
-                  <div className="batch-card">
-                    <div className="batch-header">
-                      <h3>{batch.name}</h3>
-                    </div>
-
-                    <div className="batch-stats">
-                      <div className="stat">
-                        <span className="label">Trainees</span>
-                        <span className="value">
-                          {batch.traineeCount}
-                        </span>
-                      </div>
-                      <div className="stat">
-                        <span className="label">Progress</span>
-                        <span className="value">{Math.round(batch.progress)}%</span>
-                      </div>
-                    </div>
-
-                    <div className="progress-bar">
-                      <div
-                        className="progress-fill"
-                        style={{ width: `${batch.progress}%` }}
-                      ></div>
-                    </div>
-
-                    <div className="batch-actions">
-                      <button
-                        className="action-btn primary"
-                        onClick={() => handleViewBatch(batch)}
-                      >
-                        View Details
-                      </button>
-                    </div>
-                  </div>
-                </Card>
-              ))}
+            <div className="overflow-x-auto border-y border-slate-200">
+              <table className="w-full min-w-[680px] text-left text-sm">
+                <thead className="bg-slate-50 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                  <tr>
+                    <th className="px-4 py-3">Batch</th>
+                    <th className="px-4 py-3">Trainees</th>
+                    <th className="px-4 py-3">Average progress</th>
+                    <th className="px-4 py-3">Period</th>
+                    <th className="px-4 py-3">Status</th>
+                    <th className="px-4 py-3 text-right">Manage</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-slate-200">
+                  {batches.map((batch) => (
+                    <tr key={batch.id} className="hover:bg-slate-50/70">
+                      <th scope="row" className="px-4 py-3 font-semibold text-slate-900">{batch.name}</th>
+                      <td className="px-4 py-3 tabular-nums text-slate-700">{batch.traineeCount}</td>
+                      <td className="px-4 py-3">
+                        <div className="flex items-center gap-2"><div className="h-1.5 w-20 overflow-hidden rounded bg-slate-200"><div className="h-full rounded bg-indigo-600" style={{ width: `${Math.max(0, Math.min(100, Number(batch.progress) || 0))}%` }} /></div><span className="tabular-nums text-slate-700">{Math.round(batch.progress || 0)}%</span></div>
+                      </td>
+                      <td className="px-4 py-3 whitespace-nowrap text-slate-600">{batch.startDate ? new Date(batch.startDate).toLocaleDateString() : '—'}{batch.endDate ? ` – ${new Date(batch.endDate).toLocaleDateString()}` : ''}</td>
+                      <td className="px-4 py-3"><span className="font-medium capitalize text-slate-600">{batch.status || 'active'}</span></td>
+                      <td className="px-4 py-3 text-right"><button className="font-semibold text-indigo-700 hover:text-indigo-900" onClick={() => handleViewBatch(batch)}>Open batch →</button></td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
             </div>
           )}
         </>
