@@ -46,6 +46,16 @@ export function Navbar() {
                     Cohorts
                   </Link>
                   <Link
+                    to="/admin/nominations"
+                    className={`px-3.5 py-2 rounded-xl text-sm font-semibold transition-all ${
+                      isActive('/admin/nominations')
+                        ? 'bg-slate-100 text-slate-900'
+                        : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                    }`}
+                  >
+                    Nominations
+                  </Link>
+                  <Link
                     to="/admin/training-templates"
                     className={`px-3.5 py-2 rounded-xl text-sm font-semibold transition-all ${
                       isActive('/admin/training-templates')
@@ -125,14 +135,14 @@ export function Navbar() {
 
               {role === 'nominator' && (
                 <Link
-                  to="/nominator/cohorts"
+                  to="/nominator/dashboard"
                   className={`px-3.5 py-2 rounded-xl text-sm font-semibold transition-all ${
-                    isActive('/nominator/cohorts')
+                    isActive('/nominator/dashboard')
                       ? 'bg-slate-100 text-slate-900'
                       : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
                   }`}
                 >
-                  My Cohorts
+                  Nominations
                 </Link>
               )}
             </nav>

@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, Query, HTTPException, status
 from bson import ObjectId
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from app.core.db import get_database
-from app.core.deps import require_admin, require_nominator, require_any_authenticated
+from app.core.deps import require_admin, require_any_authenticated
 from app.services.cohort_service import CohortService
 from app.schemas.cohorts import (
     CohortCreate, CohortUpdate, CohortStatusUpdate, CohortConfigureRequest,
@@ -27,8 +27,7 @@ async def list_cohorts(
     db: AsyncIOMotorDatabase = Depends(get_database),
     current_user: dict = Depends(require_any_authenticated)
 ):
-    nominator_id = current_user["id"] if current_user.get("role") == "nominator" else None
-    return await CohortService.get_cohorts(db, page, limit, nominator_id)
+    return await CohortService.get_cohorts(db, page, limit)
 
 @router.get("/{cohort_id}", response_model=CohortResponse)
 async def get_cohort(
@@ -36,14 +35,7 @@ async def get_cohort(
     db: AsyncIOMotorDatabase = Depends(get_database),
     current_user: dict = Depends(require_any_authenticated)
 ):
-    cohort = await CohortService.get_cohort_by_id(db, cohort_id)
-    if current_user.get("role") == "nominator" and current_user["id"] not in cohort.get("nominatorIds", []):
-        raise HTTPException(
-            status_code=status.HTTP_403_FORBIDDEN,
-            detail="You do not have access to this cohort",
-            headers={"code": "FORBIDDEN"}
-        )
-    return cohort
+    return await CohortService.get_cohort_by_id(db, cohort_id)
 
 @router.put("/{cohort_id}", response_model=CohortResponse)
 async def update_cohort(

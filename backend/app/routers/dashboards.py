@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from typing import Optional
 from bson import ObjectId
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from datetime import datetime, timedelta
@@ -58,10 +59,11 @@ async def get_admin_dashboard(
 
 @router.get("/mentor/dashboard", response_model=MentorDashboardStats)
 async def get_mentor_dashboard(
+    cohort_id: Optional[str] = Query(None),
     db: AsyncIOMotorDatabase = Depends(get_database),
     current_user: dict = Depends(require_mentor)
 ):
-    trainees = await ProgressService.get_mentor_trainees(db, current_user)
+    trainees = await ProgressService.get_mentor_trainees(db, current_user, cohort_id=cohort_id)
     active_trainees = [t for t in trainees if t.get("status") != "dropped_out"]
     dropped_out_trainees = [t for t in trainees if t.get("status") == "dropped_out"]
     
@@ -77,6 +79,8 @@ async def get_mentor_dashboard(
             "email": t.get("email", ""),
             "department": t.get("department", ""),
             "employeeId": t.get("employeeId", ""),
+            "location": t.get("location", ""),
+            "timezone": t.get("timezone", ""),
             "cohortId": t.get("cohortId", ""),
             "cohortName": t.get("cohortName", "Cohort"),
             "percentComplete": t.get("percentComplete", 0.0),

@@ -21,12 +21,6 @@ class UserCreateWithTempPassword(BaseModel):
     createdBy: str  # admin user id
 
 class NominatorCreate(BaseModel):
-    name: str
-    email: EmailStr
-    password: str
-    assignedCohortIds: Optional[List[str]] = []
-
-class CohortNominatorCreate(BaseModel):
     name: str = Field(min_length=1, max_length=100)
     employeeId: str = Field(min_length=1, max_length=64)
     email: EmailStr

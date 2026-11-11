@@ -31,6 +31,10 @@ async def test_db():
     client.close()
 
 @pytest.fixture
+def db(test_db):
+    return test_db
+
+@pytest.fixture
 async def client():
     async with AsyncClient(transport=ASGITransport(app=app), base_url="http://test") as ac:
         yield ac

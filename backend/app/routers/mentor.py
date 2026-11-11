@@ -17,9 +17,16 @@ async def get_my_cohorts(
     db: AsyncIOMotorDatabase = Depends(get_database),
     current_user: dict = Depends(require_mentor)
 ):
-    """Return cohorts linked to the signed-in mentor profile."""
+    """Return cohorts linked to the signed-in mentor profile with trainee and batch counts."""
     mentor_profiles = await db.mentors.find({"userId": current_user["id"]}).to_list(length=None)
-    cohort_ids = list(dict.fromkeys(str(profile.get("cohortId")) for profile in mentor_profiles if profile.get("cohortId")))
+    cohort_ids = []
+    for profile in mentor_profiles:
+        c_ids = profile.get("cohortIds") or ([str(profile["cohortId"])] if profile.get("cohortId") else [])
+        for cid in c_ids:
+            if cid and str(cid) not in cohort_ids:
+                cohort_ids.append(str(cid))
+
+    mentor_ids = [str(profile["_id"]) for profile in mentor_profiles]
     cohorts = []
     for cohort_id in cohort_ids:
         try:
@@ -27,21 +34,37 @@ async def get_my_cohorts(
         except Exception:
             cohort = None
         if cohort:
+            cid_str = str(cohort["_id"])
+            # Assigned active trainees in this cohort
+            trainee_count = await db.trainees.count_documents({
+                "cohortId": cid_str,
+                "mentorId": {"$in": mentor_ids},
+                "status": {"$ne": "dropped_out"}
+            })
+            # Batches created by mentor in this cohort
+            batch_count = await db.batches.count_documents({
+                "cohortId": {"$in": [ObjectId(cid_str), cid_str]},
+                "mentorId": {"$in": [ObjectId(current_user["id"]), current_user["id"]]}
+            })
             cohorts.append({
-                "id": str(cohort["_id"]),
+                "id": cid_str,
                 "name": cohort.get("name", "Unnamed Cohort"),
+                "code": cohort.get("code") or (cid_str[:8].upper()),
                 "status": cohort.get("status", "active"),
                 "startDate": cohort.get("startDate"),
                 "endDate": cohort.get("endDate"),
+                "traineeCount": trainee_count,
+                "batchCount": batch_count,
             })
     return cohorts
 
 @router.get("/trainees")
 async def get_my_trainees(
+    cohort_id: Optional[str] = None,
     db: AsyncIOMotorDatabase = Depends(get_database),
     current_user: dict = Depends(require_mentor)
 ):
-    return await ProgressService.get_mentor_trainees(db, current_user)
+    return await ProgressService.get_mentor_trainees(db, current_user, cohort_id=cohort_id)
 
 @router.get("/trainees/{trainee_id}")
 async def get_trainee_details(
@@ -147,6 +170,23 @@ async def get_mentor_cohort_plan(
     current_user: dict = Depends(require_mentor)
 ):
     if cohortId:
+        if current_user.get("role") == "mentor":
+            mentor_profile = await db.mentors.find_one({
+                "$or": [{"cohortIds": cohortId}, {"cohortId": cohortId}],
+                "userId": current_user["id"]
+            })
+            if not mentor_profile:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="You are not authorized to view this cohort's plan",
+                    headers={"code": "FORBIDDEN"}
+                )
+            if not current_user.get("isActive", True) or not mentor_profile.get("isActive", True):
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Account is deactivated",
+                    headers={"code": "ACCOUNT_INACTIVE"}
+                )
         cohort = await db.cohorts.find_one({"_id": ObjectId(cohortId)})
     else:
         # Find first mentor record for current_user
@@ -157,7 +197,14 @@ async def get_mentor_cohort_plan(
                 detail="Mentor profile not found",
                 headers={"code": "NOT_FOUND"}
             )
-        cohort = await db.cohorts.find_one({"_id": ObjectId(mentor["cohortId"])})
+        c_ids = mentor.get("cohortIds") or ([mentor.get("cohortId")] if mentor.get("cohortId") else [])
+        if not c_ids:
+            raise HTTPException(
+                status_code=status.HTTP_404_NOT_FOUND,
+                detail="No cohort assigned to mentor",
+                headers={"code": "NOT_FOUND"}
+            )
+        cohort = await db.cohorts.find_one({"_id": ObjectId(str(c_ids[0]))})
 
     if not cohort or not cohort.get("trainingPlanId"):
         raise HTTPException(

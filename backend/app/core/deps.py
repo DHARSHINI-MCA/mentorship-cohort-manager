@@ -46,6 +46,14 @@ async def get_current_user(
             detail="User not found or inactive",
             headers={"code": "USER_INACTIVE"}
         )
+    if user.get("role") == "mentor":
+        mentor_profile = await db.mentors.find_one({"userId": str(user["_id"])})
+        if mentor_profile and not mentor_profile.get("isActive", True):
+            raise HTTPException(
+                status_code=status.HTTP_401_UNAUTHORIZED,
+                detail="User account is deactivated",
+                headers={"code": "USER_INACTIVE"}
+            )
     
     user["id"] = str(user["_id"])
     return user
@@ -65,4 +73,6 @@ def require_roles(allowed_roles: List[str]):
 require_admin = require_roles(["admin"])
 require_nominator = require_roles(["admin", "nominator"])
 require_mentor = require_roles(["mentor"])
-require_any_authenticated = require_roles(["admin", "nominator", "mentor"])
+# Admin + mentor only. Nominators are independent of cohorts and must never
+# reach cohort, template, plan or mentor/trainee-assignment data.
+require_any_authenticated = require_roles(["admin", "mentor"])

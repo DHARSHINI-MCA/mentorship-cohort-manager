@@ -16,7 +16,7 @@ export function Login() {
   const routeToRoleHome = (user) => {
     if (user.role === 'admin') navigate('/admin/cohorts');
     else if (user.role === 'mentor') navigate('/mentor/dashboard');
-    else if (user.role === 'nominator') navigate('/nominator/cohorts');
+    else if (user.role === 'nominator') navigate('/nominator/dashboard');
   };
 
   const routeToPasswordSetup = (loginEmail, loginPassword) => {

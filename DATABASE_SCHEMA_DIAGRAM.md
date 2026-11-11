@@ -61,6 +61,7 @@ erDiagram
         string name
         int totalWeeks
         array weeks
+        array talentnextCourses "courseId, isMandatory"
     }
 
     COHORT_TRAINING_PLANS {
@@ -71,6 +72,7 @@ erDiagram
         int coreWeeks
         int bufferWeeks
         array weeks
+        array talentnextCourses "courseId, isMandatory"
     }
 
     FEEDBACK_TEMPLATES {
@@ -157,6 +159,9 @@ erDiagram
     TRAINEES ||--o{ FEEDBACK_RESPONSES : receives
     TRAINEES ||--o{ TALENTNEXT_PROGRESS : tracks
     COHORTS ||--o{ TALENTNEXT_PROGRESS : scopes
+    TALENTNEXT_COURSES }o--o{ TRAINING_TEMPLATES : "template course assignments"
+    TALENTNEXT_COURSES }o--o{ COHORT_TRAINING_PLANS : "copied plan assignments"
+    TALENTNEXT_COURSES }o--o{ COHORTS : "cohort course assignments"
 ```
 
 ## Notes
@@ -164,5 +169,6 @@ erDiagram
 - Attendance is an embedded array in each session, not a separate collection in the current flow. This keeps attendance attached to the meeting where it was recorded.
 - The session roster is also stored as a snapshot, so changes to a batch later do not rewrite that session's roster.
 - Training plans and feedback forms are copied into cohort-specific collections when configured.
+- TalentNext course selections are stored on reusable training templates and copied to cohort training plans when applied.
 - IDs are not fully uniform across older API paths: some references use strings while others use BSON `ObjectId` values.
 - A trainee is limited to one active batch at a time by application logic.

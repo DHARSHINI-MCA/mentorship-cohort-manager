@@ -149,6 +149,7 @@ async def create_session(
 
 @router.get("/", response_model=list)
 async def list_sessions(
+    cohort_id: Optional[str] = Query(None),
     batch_id: Optional[str] = Query(None),
     status: Optional[str] = Query(None),
     from_date: Optional[datetime] = Query(None),
@@ -169,8 +170,27 @@ async def list_sessions(
         if current_user.get("role") == "mentor":
             query["mentorId"] = ObjectId(current_user["id"])
         
-        # Apply optional filters
-        if batch_id:
+        # Cohort filter
+        if cohort_id:
+            if current_user.get("role") == "mentor":
+                mentor_profile = await db.mentors.find_one({
+                    "$or": [{"cohortIds": cohort_id}, {"cohortId": cohort_id}],
+                    "userId": current_user["id"]
+                })
+                if not mentor_profile:
+                    raise HTTPException(
+                        status_code=status.HTTP_403_FORBIDDEN,
+                        detail="You don't have access to this cohort"
+                    )
+            cohort_batches = await db.batches.find({
+                "cohortId": {"$in": [ObjectId(cohort_id), cohort_id]}
+            }, {"_id": 1}).to_list(length=None)
+            cohort_batch_ids = [b["_id"] for b in cohort_batches]
+            if batch_id:
+                query["batchId"] = ObjectId(batch_id)
+            else:
+                query["batchId"] = {"$in": cohort_batch_ids}
+        elif batch_id:
             query["batchId"] = ObjectId(batch_id)
         if status:
             query["status"] = status

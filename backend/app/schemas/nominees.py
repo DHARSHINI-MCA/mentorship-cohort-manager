@@ -17,58 +17,78 @@ class TraineeInMentor(BaseModel):
 class MentorNomineeCreate(BaseModel):
     name: str
     email: EmailStr
-    department: str
+    department: Optional[str] = ""
     employeeId: Optional[str] = ""
-    location: Optional[str] = None  # NEW: Geographic location
-    timezone: Optional[str] = None  # NEW: Timezone
-    experience: Optional[str] = None  # NEW: Years of experience
-    skills: Optional[List[str]] = []  # NEW: Technical skills
+    location: Optional[str] = None
+    timezone: Optional[str] = None
+    experience: Optional[str] = None
+    skills: Optional[List[str]] = []
+
+class CohortRef(BaseModel):
+    id: str
+    name: str
+    status: Optional[str] = "active"
 
 class MentorNomineeResponse(BaseModel):
+    """Mentor as seen by admin / inside a cohort."""
     id: str
-    cohortId: str
+    cohortId: Optional[str] = None
+    cohortIds: Optional[List[str]] = []
+    cohortNames: Optional[List[str]] = []
+    assignedCohorts: Optional[List[CohortRef]] = []
     nominatedBy: Optional[str] = "admin"
     nominatorName: Optional[str] = "Admin"
     name: str
     email: EmailStr
-    department: str
+    department: Optional[str] = ""
     employeeId: Optional[str] = ""
-    location: Optional[str] = None  # NEW
-    timezone: Optional[str] = None  # NEW
-    experience: Optional[str] = None  # NEW
-    skills: Optional[List[str]] = []  # NEW
+    location: Optional[str] = None
+    timezone: Optional[str] = None
+    experience: Optional[str] = None
+    skills: Optional[List[str]] = []
     userId: Optional[str] = None
     isLoginActive: bool = False
-    isAccountActive: bool = False
-    status: Optional[str] = "pending"  # NEW: pending, approved, rejected
+    isAccountActive: bool = True
+    isActive: bool = True
+    status: Optional[str] = "pending"
     assignedTraineesCount: Optional[int] = 0
     assignedTrainees: Optional[List[TraineeInMentor]] = []
     createdAt: datetime
+
+class MentorCohortsUpdateRequest(BaseModel):
+    cohortIds: List[str]
+
+class TraineeCohortUpdateRequest(BaseModel):
+    cohortId: Optional[str] = None
+
+class MentorAssignCohortsRequest(BaseModel):
+    cohortIds: List[str]
 
 class TraineeNomineeCreate(BaseModel):
     name: str
     email: EmailStr
     employeeId: str
-    department: str
-    location: Optional[str] = None  # NEW: Geographic location
-    timezone: Optional[str] = None  # NEW: Timezone
-    experience: Optional[str] = None  # NEW: Background/experience
-    skills: Optional[List[str]] = []  # NEW: Technical skills
+    department: Optional[str] = ""
+    location: Optional[str] = None
+    timezone: Optional[str] = None
+    experience: Optional[str] = None
+    skills: Optional[List[str]] = []
 
 class TraineeNomineeResponse(BaseModel):
+    """Trainee as seen by admin / inside a cohort."""
     id: str
-    cohortId: str
+    cohortId: Optional[str] = None
     nominatedBy: Optional[str] = "admin"
     nominatorName: Optional[str] = "Admin"
     name: str
     email: EmailStr
     employeeId: str
-    department: str
-    location: Optional[str] = None  # NEW
-    timezone: Optional[str] = None  # NEW
-    experience: Optional[str] = None  # NEW
-    skills: Optional[List[str]] = []  # NEW
-    status: Optional[str] = "pending"  # NEW: pending, approved, rejected
+    department: Optional[str] = ""
+    location: Optional[str] = None
+    timezone: Optional[str] = None
+    experience: Optional[str] = None
+    skills: Optional[List[str]] = []
+    status: Optional[str] = "pending"
     droppedOutAt: Optional[datetime] = None
     droppedOutBy: Optional[str] = None
     dropoutReason: Optional[str] = None
@@ -76,6 +96,23 @@ class TraineeNomineeResponse(BaseModel):
     mentorName: Optional[str] = None
     percentComplete: Optional[float] = 0.0
     createdAt: datetime
+
+class MyNomineeResponse(BaseModel):
+    """What a nominator sees about their own nominees. Deliberately has NO
+    cohort, mentor or progress information."""
+    id: str
+    type: str  # "mentor" | "trainee"
+    name: str
+    email: EmailStr
+    employeeId: Optional[str] = ""
+    location: Optional[str] = None
+    timezone: Optional[str] = None
+    experience: Optional[str] = None
+    skills: Optional[List[str]] = []
+    createdAt: datetime
+
+class AllocateRequest(BaseModel):
+    ids: List[str]
 
 class MentorAssignmentRequest(BaseModel):
     mentorId: str

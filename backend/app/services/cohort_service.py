@@ -127,13 +127,10 @@ class CohortService:
     async def get_cohorts(
         db: AsyncIOMotorDatabase,
         page: int = 1,
-        limit: int = 20,
-        nominator_id: str = None
+        limit: int = 20
     ) -> dict:
         query = {}
-        if nominator_id:
-            query["nominatorIds"] = nominator_id
-            
+
         skip = (page - 1) * limit
         cursor = db.cohorts.find(query).sort("createdAt", -1).skip(skip).limit(limit)
         items = []
@@ -143,7 +140,7 @@ class CohortService:
             doc.pop("_id", None)
             
             # Aggregate stats
-            mentor_count = await db.mentors.count_documents({"cohortId": cohort_id})
+            mentor_count = await db.mentors.count_documents({"$or": [{"cohortIds": cohort_id}, {"cohortId": cohort_id}]})
             trainee_count = await db.trainees.count_documents({"cohortId": cohort_id})
             dropped_out_count = await db.trainees.count_documents({"cohortId": cohort_id, "status": "dropped_out"})
             assigned_trainee_count = await db.trainees.count_documents({
@@ -187,7 +184,7 @@ class CohortService:
         doc.pop("_id", None)
         
         # Aggregate counts
-        doc["mentorCount"] = await db.mentors.count_documents({"cohortId": cohort_id})
+        doc["mentorCount"] = await db.mentors.count_documents({"$or": [{"cohortIds": cohort_id}, {"cohortId": cohort_id}]})
         doc["traineeCount"] = await db.trainees.count_documents({"cohortId": cohort_id})
         doc["droppedOutTraineeCount"] = await db.trainees.count_documents({"cohortId": cohort_id, "status": "dropped_out"})
         doc["activeTraineeCount"] = doc["traineeCount"] - doc["droppedOutTraineeCount"]

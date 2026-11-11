@@ -44,7 +44,7 @@ async def create_batch(
         mentor_profile_ids = []
         if current_user.get("role") == "mentor":
             mentor_profiles = await db.mentors.find({
-                "cohortId": data.cohortId,
+                "$or": [{"cohortIds": data.cohortId}, {"cohortId": data.cohortId}],
                 "userId": current_user["id"]
             }).to_list(length=None)
             mentor_profile_ids = [str(profile["_id"]) for profile in mentor_profiles]
@@ -190,7 +190,22 @@ async def list_batches(
         
         # Apply optional filters
         if cohort_id:
-            query["cohortId"] = ObjectId(cohort_id)
+            try:
+                cohort_oid = ObjectId(cohort_id)
+            except Exception:
+                cohort_oid = None
+            query["cohortId"] = {"$in": [cohort_oid, cohort_id]} if cohort_oid else cohort_id
+
+            if current_user.get("role") == "mentor":
+                mentor_profile = await db.mentors.find_one({
+                    "$or": [{"cohortIds": cohort_id}, {"cohortId": cohort_id}],
+                    "userId": current_user["id"]
+                })
+                if not mentor_profile:
+                    raise HTTPException(
+                        status_code=status.HTTP_403_FORBIDDEN,
+                        detail="You don't have access to this cohort"
+                    )
         if status:
             query["status"] = status
         
@@ -472,7 +487,7 @@ async def add_trainees_to_batch(
         }
         if current_user.get("role") == "mentor":
             mentor_profiles = await db.mentors.find({
-                "cohortId": str(batch["cohortId"]),
+                "$or": [{"cohortIds": str(batch["cohortId"])}, {"cohortId": str(batch["cohortId"])}],
                 "userId": current_user["id"],
             }).to_list(length=None)
             mentor_profile_ids = [str(profile["_id"]) for profile in mentor_profiles]

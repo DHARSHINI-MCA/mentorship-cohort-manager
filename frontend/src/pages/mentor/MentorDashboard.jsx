@@ -1,17 +1,19 @@
-import React from 'react';
+import React, { useState } from 'react';
 import { useQuery } from '@tanstack/react-query';
 import { Link } from 'react-router-dom';
 import api from '../../api/client';
 import { useAuth } from '../../context/AuthContext';
-import { Card, CardBody, CardFooter } from '../../components/Card';
+import { Card, CardBody } from '../../components/Card';
 import { Badge } from '../../components/Badge';
 import { ProgressBar } from '../../components/ProgressBar';
-import { SkeletonCard } from '../../components/SkeletonCard';
 import { EmptyState } from '../../components/EmptyState';
-import { Users, BookOpen, TrendingUp, ArrowRight, MessageSquare, ExternalLink, ClipboardList, CheckCircle2 } from 'lucide-react';
+import { DataTable, PersonCell } from '../../components/DataTable';
+import { Users, BookOpen, TrendingUp, ArrowRight, ExternalLink, Search } from 'lucide-react';
 
 export function MentorDashboard() {
   const { user } = useAuth();
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState('ALL');
 
   const { data: dashboardData, isLoading } = useQuery({
     queryKey: ['mentorDashboard'],
@@ -115,94 +117,121 @@ export function MentorDashboard() {
         </Card>
       </div>
 
-      {/* Trainees Cards Grid */}
+      {/* Assigned trainees table */}
       <div className="space-y-4">
-        <div className="flex items-center justify-between">
-          <h2 className="text-lg font-bold text-slate-800">
-            Assigned Trainees ({dashboardData?.totalTrainees || 0})
-          </h2>
-          <span className="text-xs text-slate-500">
-            Click on any trainee to check courses and submit weekly feedback
-          </span>
+        <div className="flex flex-col gap-3 lg:flex-row lg:items-center lg:justify-between">
+          <div>
+            <h2 className="text-lg font-bold text-slate-800">
+              Assigned Trainees ({dashboardData?.totalTrainees || 0})
+            </h2>
+            <span className="text-xs text-slate-500">
+              Open a trainee to check courses and submit weekly feedback
+            </span>
+          </div>
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <div className="relative sm:w-72">
+              <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
+              <input
+                value={search}
+                onChange={(event) => setSearch(event.target.value)}
+                placeholder="Search name, email or employee ID…"
+                className="w-full pl-10 pr-3 py-2 text-xs rounded-xl border border-slate-200 bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500"
+              />
+            </div>
+            <select
+              value={statusFilter}
+              onChange={(event) => setStatusFilter(event.target.value)}
+              className="px-3 py-2 text-xs font-semibold rounded-xl border border-slate-200 bg-white"
+            >
+              <option value="ALL">All trainees</option>
+              <option value="IN_PROGRESS">In progress</option>
+              <option value="COMPLETED">Completed</option>
+              <option value="DROPPED">Dropped out</option>
+            </select>
+          </div>
         </div>
 
-        {isLoading ? (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            <SkeletonCard count={3} />
-          </div>
-        ) : dashboardData?.trainees?.length === 0 ? (
+        {!isLoading && dashboardData?.trainees?.length === 0 ? (
           <EmptyState
             icon={Users}
             title="No trainees currently assigned"
             description="You don't have any trainees assigned to your profile in active cohorts yet."
           />
         ) : (
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {dashboardData?.trainees?.map((t) => (
-              <Card key={t.traineeId} hover className="flex flex-col justify-between">
-                <CardBody className="p-6">
-                  <div className="flex justify-between items-start gap-2 mb-2">
-                    <div>
-                      <div className="flex items-center gap-2"><h3 className="font-bold text-slate-800 text-base">{t.name}</h3>{t.status === 'dropped_out' && <Badge variant="danger">Dropped Out</Badge>}</div>
-                      <p className="text-xs text-slate-500">{t.email}</p>
-                    </div>
-                    <span className="font-mono text-[11px] font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded">
-                      {t.employeeId}
-                    </span>
+          <DataTable
+            loading={isLoading}
+            rowKey={(t) => t.traineeId}
+            rows={(dashboardData?.trainees || []).filter((t) => {
+              const q = search.toLowerCase().trim();
+              const matchesSearch = !q || [t.name, t.email, t.employeeId, t.cohortName]
+                .some((value) => String(value || '').toLowerCase().includes(q));
+              const dropped = t.status === 'dropped_out';
+              const done = !dropped && t.percentComplete >= 100;
+              const matchesStatus =
+                statusFilter === 'ALL' ||
+                (statusFilter === 'DROPPED' && dropped) ||
+                (statusFilter === 'COMPLETED' && done) ||
+                (statusFilter === 'IN_PROGRESS' && !dropped && !done);
+              return matchesSearch && matchesStatus;
+            })}
+            emptyMessage="No trainees match your search."
+            pageSize={10}
+            columns={[
+              { key: 'name', header: 'Trainee', render: (t) => <PersonCell primary={t.name} secondary={t.email} /> },
+              { key: 'employeeId', header: 'Employee ID', render: (t) => <span className="font-mono text-xs bg-slate-100 px-2 py-0.5 rounded">{t.employeeId || '—'}</span> },
+              { key: 'cohortName', header: 'Cohort' },
+              {
+                key: 'progress',
+                header: 'Curriculum',
+                className: 'min-w-[130px]',
+                render: (t) => (
+                  <div className="flex items-center gap-2">
+                    <div className="flex-1"><ProgressBar percent={t.percentComplete} size="sm" showLabel={false} /></div>
+                    <span className="text-xs font-bold text-slate-700 w-9 text-right">{Math.round(t.percentComplete || 0)}%</span>
                   </div>
-
-                  <div className="text-xs text-slate-600 font-medium mb-4 flex items-center gap-1.5">
-                    <span className="px-2 py-0.5 rounded bg-blue-50 text-blue-700 font-semibold">{t.department}</span>
-                    <span className="text-slate-400">&bull;</span>
-                    <span className="text-slate-500">{t.cohortName}</span>
+                ),
+              },
+              {
+                key: 'feedback',
+                header: 'Weekly feedback',
+                render: (t) => (
+                  <div>
+                    <span className="text-xs font-bold text-purple-700">{t.feedbackCount || 0} / {t.totalWeeks || 4} weeks</span>
+                    <p className="text-[11px] text-slate-400">
+                      {t.lastFeedbackDate
+                        ? `Latest: week ${t.lastFeedbackWeek}, ${new Date(t.lastFeedbackDate).toLocaleDateString()}`
+                        : 'Week 1 pending'}
+                    </p>
                   </div>
-
-                  <div className="space-y-3 pt-3 border-t border-slate-100">
-                    <div className="space-y-1">
-                      <div className="flex justify-between items-center text-xs">
-                        <span className="font-semibold text-slate-600">Curriculum</span>
-                        <span className="font-bold text-slate-800">{t.percentComplete}%</span>
-                      </div>
-                      <ProgressBar percent={t.percentComplete} size="sm" showLabel={false} />
-                    </div>
-
-                    <div className="flex items-center justify-between text-xs pt-1.5 border-t border-slate-100">
-                      <span className="flex items-center gap-1.5 text-slate-600 font-medium">
-                        <ClipboardList className="w-3.5 h-3.5 text-purple-600" />
-                        <span>Weekly Feedback</span>
-                      </span>
-                      <span className="font-bold text-purple-700 bg-purple-50 px-2 py-0.5 rounded-full text-[11px] border border-purple-100">
-                        {t.feedbackCount || 0} / {t.totalWeeks || 4} Weeks Done
-                      </span>
-                    </div>
-
-                    {t.lastFeedbackDate ? (
-                      <p className="text-[11px] text-slate-400">
-                        Latest: Week {t.lastFeedbackWeek} on {new Date(t.lastFeedbackDate).toLocaleDateString()}
-                      </p>
-                    ) : (
-                      <p className="text-[11px] text-amber-600 font-medium flex items-center gap-1">
-                        <span>●</span> Week 1 evaluation pending
-                      </p>
-                    )}
-                  </div>
-                </CardBody>
-
-                <CardFooter className="bg-slate-50/50">
-                  <span className="text-xs font-semibold text-slate-500">
-                    {t.status === 'dropped_out' ? 'Dropped Out' : t.percentComplete >= 100 ? 'Completed Track' : 'In Progress'}
-                  </span>
+                ),
+              },
+              {
+                key: 'status',
+                header: 'Status',
+                render: (t) =>
+                  t.status === 'dropped_out' ? (
+                    <Badge variant="danger">Dropped Out</Badge>
+                  ) : (
+                    <Badge variant={t.percentComplete >= 100 ? 'active' : 'draft'}>
+                      {t.percentComplete >= 100 ? 'Completed' : 'In Progress'}
+                    </Badge>
+                  ),
+              },
+              {
+                key: 'open',
+                header: '',
+                render: (t) => (
                   <Link
                     to={`/mentor/trainees/${t.traineeId}`}
-                    className="px-3 py-1.5 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold flex items-center gap-1 shadow-xs transition-all"
+                    className="inline-flex items-center gap-1 whitespace-nowrap rounded-xl bg-emerald-600 px-3 py-1.5 text-xs font-bold text-white shadow-xs hover:bg-emerald-700"
                   >
                     <span>{t.status === 'dropped_out' ? 'View Details' : 'Review Feedback'}</span>
                     <ArrowRight className="w-3.5 h-3.5" />
                   </Link>
-                </CardFooter>
-              </Card>
-            ))}
-          </div>
+                ),
+              },
+            ]}
+          />
         )}
       </div>
     </div>

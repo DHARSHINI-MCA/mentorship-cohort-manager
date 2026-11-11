@@ -18,15 +18,38 @@ class ProgressService:
         return mentor
 
     @staticmethod
-    async def get_mentor_trainees(db: AsyncIOMotorDatabase, user: dict) -> list:
+    async def get_mentor_trainees(db: AsyncIOMotorDatabase, user: dict, cohort_id: str = None) -> list:
+        # If cohort_id is provided, check mentor authorization
+        if cohort_id and user.get("role") == "mentor":
+            mentor_profile = await db.mentors.find_one({
+                "$or": [{"cohortIds": cohort_id}, {"cohortId": cohort_id}],
+                "userId": user["id"]
+            })
+            if not mentor_profile:
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="You are not authorized to access this cohort",
+                    headers={"code": "FORBIDDEN"}
+                )
+            if not user.get("isActive", True) or not mentor_profile.get("isActive", True):
+                raise HTTPException(
+                    status_code=status.HTTP_403_FORBIDDEN,
+                    detail="Account is deactivated",
+                    headers={"code": "ACCOUNT_INACTIVE"}
+                )
+
         # Find mentor IDs associated with this user
         mentor_cursor = db.mentors.find({"userId": user["id"]})
         mentor_ids = [str(m["_id"]) async for m in mentor_cursor]
         if not mentor_ids:
             return []
 
+        query = {"mentorId": {"$in": mentor_ids}}
+        if cohort_id:
+            query["cohortId"] = cohort_id
+
         # Find trainees assigned to any of these mentor records
-        trainees_cursor = db.trainees.find({"mentorId": {"$in": mentor_ids}}).sort("name", 1)
+        trainees_cursor = db.trainees.find(query).sort("name", 1)
         items = []
         async for t in trainees_cursor:
             trainee_id = str(t["_id"])

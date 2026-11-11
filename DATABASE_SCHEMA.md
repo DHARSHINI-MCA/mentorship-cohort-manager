@@ -40,7 +40,6 @@ Login identities for administrators, mentors, and nominators.
   startDate: String,
   endDate: String,
   status: "draft" | "active" | "closed",
-  nominatorIds: [String],
   trainingPlanId: String?,
   feedbackFormId: String?,
   talentnextCourses: [{ courseId: String, isMandatory: Boolean }],
@@ -54,7 +53,7 @@ Login identities for administrators, mentors, and nominators.
 ```js
 {
   _id: ObjectId,
-  cohortId: ObjectId | String,
+  cohortId: String | null,   // null = nominated but not yet added to a cohort
   nominatedBy: String?,
   userId: String?,                 // linked login in users
   name: String,
@@ -75,7 +74,7 @@ Login identities for administrators, mentors, and nominators.
 ```js
 {
   _id: ObjectId,
-  cohortId: ObjectId | String,
+  cohortId: String | null,   // null = nominated but not yet added to a cohort
   nominatedBy: String?,
   mentorId: ObjectId | String?,   // assigned mentor profile
   name: String,
@@ -270,7 +269,8 @@ Attendance is editable after it has been submitted. A session can hold multiple 
 ## Relationships and indexes
 
 - `users` → `mentors`: optional account/profile link through `mentors.userId`.
-- `users` → `cohorts`: nominator access through `cohorts.nominatorIds`.
+- `users` (role `nominator`) → `mentors` / `trainees`: a nominator owns the people they nominated through `nominatedBy`. Nominators are not linked to cohorts.
+- `mentors` / `trainees`: `cohortId` is `null` while a nominee is only in the nomination pool. An admin adds the nominee to a cohort, which sets `cohortId`.
 - `cohorts` → `mentors`, `trainees`, `batches`, and cohort-specific training/feedback copies.
 - `mentors` → `trainees`: trainee assignment through `trainees.mentorId`.
 - `trainees` → `progress`: one progress document per trainee.
