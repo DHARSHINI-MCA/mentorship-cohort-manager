@@ -59,7 +59,8 @@ class AssignmentService:
                         headers={"code": "MENTOR_DEACTIVATED"}
                     )
 
-        if str(mentor["cohortId"]) != str(trainee["cohortId"]):
+        mentor_cohorts = [str(c) for c in (mentor.get("cohortIds") or ([mentor.get("cohortId")] if mentor.get("cohortId") else []))]
+        if str(trainee.get("cohortId")) not in mentor_cohorts:
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Mentor and Trainee must belong to the same cohort",

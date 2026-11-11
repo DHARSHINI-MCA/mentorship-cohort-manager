@@ -209,7 +209,6 @@ async def run_seed() -> None:
             "startDate": "2026-11-01",
             "endDate": "2026-11-28",
             "status": "active",
-            "nominatorIds": [str(nominator_id)],
             "trainingPlanId": str(plan_id),
             "feedbackFormId": str(feedback_form_id),
             "talentnextCourses": course_assignments,
@@ -413,6 +412,50 @@ async def run_seed() -> None:
             },
         ]
         await db.sessions.insert_many(sessions)
+
+        # Nomination pool: nominated by the demo nominator but NOT yet added to any
+        # cohort (cohortId = None). The admin sees these on the Nominations page and
+        # adds them to a cohort.
+        pool_mentors = [
+            ("Priya Nair", "priya.nair@example.com", "EMP-MTR-04", "Platform Engineering", "Bengaluru, India", "Asia/Kolkata"),
+            ("Marcus Lee", "marcus.lee@example.com", "EMP-MTR-05", "Cloud Infrastructure", "Austin, USA", "America/Chicago"),
+        ]
+        for name, email, employee_id, department, location, tz in pool_mentors:
+            await db.mentors.insert_one({
+                "cohortId": None,
+                "nominatedBy": str(nominator_id),
+                "userId": None,
+                "name": name,
+                "email": email,
+                "employeeId": employee_id,
+                "department": department,
+                "location": location,
+                "timezone": tz,
+                "experience": "Experienced mentor",
+                "skills": [],
+                "createdAt": now,
+            })
+        pool_trainees = [
+            ("Ava Thompson", "ava.thompson@example.com", "EMP-TRN-201", "Frontend UI", "Mumbai, India", "Asia/Kolkata"),
+            ("Ethan Brooks", "ethan.brooks@example.com", "EMP-TRN-202", "Backend Core", "Denver, USA", "America/Denver"),
+            ("Isha Verma", "isha.verma@example.com", "EMP-TRN-203", "Data Science", "Delhi, India", "Asia/Kolkata"),
+            ("Noor Khan", "noor.khan@example.com", "EMP-TRN-204", "Web Platforms", "Hyderabad, India", "Asia/Kolkata"),
+        ]
+        for name, email, employee_id, department, location, tz in pool_trainees:
+            await db.trainees.insert_one({
+                "cohortId": None,
+                "nominatedBy": str(nominator_id),
+                "mentorId": None,
+                "name": name,
+                "email": email,
+                "employeeId": employee_id,
+                "department": department,
+                "location": location,
+                "timezone": tz,
+                "experience": "New hire",
+                "skills": [],
+                "createdAt": now,
+            })
 
         # Initialize indexes in the same way as the application startup.
         from app.core.db import db_instance, init_indexes

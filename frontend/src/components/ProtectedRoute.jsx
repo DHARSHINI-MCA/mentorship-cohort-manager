@@ -24,7 +24,7 @@ export function ProtectedRoute({ allowedRoles = [] }) {
   if (allowedRoles.length > 0 && !allowedRoles.includes(role)) {
     // Redirect based on current role
     if (role === 'admin') return <Navigate to="/admin/dashboard" replace />;
-    if (role === 'nominator') return <Navigate to="/nominator/cohorts" replace />;
+    if (role === 'nominator') return <Navigate to="/nominator/dashboard" replace />;
     if (role === 'mentor') return <Navigate to="/mentor/dashboard" replace />;
     return <Navigate to="/login" replace />;
   }

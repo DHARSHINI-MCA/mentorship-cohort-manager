@@ -27,16 +27,6 @@ async def main():
             },
             upsert=True,
         )
-        user = await db.users.find_one({"email": email})
-        cohort = await db.cohorts.find_one({}, sort=[("createdAt", -1)])
-        if cohort:
-            await db.cohorts.update_one(
-                {"_id": cohort["_id"]},
-                {"$addToSet": {"nominatorIds": str(user["_id"])}},
-            )
-            print(f"Assigned {email} to {cohort.get('name', 'the latest cohort')}.")
-        else:
-            print("No cohort found; create one and assign this nominator in the admin page.")
         action = "Created" if result.upserted_id else "Updated"
         print(f"{action} demo login: {email} / Nominator@123")
     finally:

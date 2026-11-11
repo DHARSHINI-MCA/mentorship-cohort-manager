@@ -34,6 +34,14 @@ async def login(credentials: LoginRequest, db: AsyncIOMotorDatabase = Depends(ge
             detail="Account is deactivated",
             headers={"code": "ACCOUNT_INACTIVE"}
         )
+    if user.get("role") == "mentor":
+        mentor_profile = await db.mentors.find_one({"userId": str(user["_id"])})
+        if mentor_profile and not mentor_profile.get("isActive", True):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Account is deactivated",
+                headers={"code": "ACCOUNT_INACTIVE"}
+            )
 
     # Check if user has temporary password (first login)
     if user.get("firstLoginPasswordReset", False):
@@ -81,6 +89,14 @@ async def login_first_time(credentials: LoginRequest, db: AsyncIOMotorDatabase =
             detail="Account is deactivated",
             headers={"code": "ACCOUNT_INACTIVE"}
         )
+    if user.get("role") == "mentor":
+        mentor_profile = await db.mentors.find_one({"userId": str(user["_id"])})
+        if mentor_profile and not mentor_profile.get("isActive", True):
+            raise HTTPException(
+                status_code=status.HTTP_403_FORBIDDEN,
+                detail="Account is deactivated",
+                headers={"code": "ACCOUNT_INACTIVE"}
+            )
 
     requires_reset = user.get("firstLoginPasswordReset", False)
     

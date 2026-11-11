@@ -20,7 +20,7 @@ import { MentorPlan } from './pages/mentor/MentorPlan';
 import BatchManagement from './pages/mentor/BatchManagement';
 import SessionHistory from './pages/mentor/SessionHistory';
 import NominatorDashboard from './pages/nominator/NominatorDashboard';
-import { CohortNominate } from './pages/nominator/CohortNominate';
+import { Nominations } from './pages/admin/Nominations';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -39,7 +39,7 @@ function RootRedirect() {
 
   if (role === 'admin') return <Navigate to="/admin/cohorts" replace />;
   if (role === 'mentor') return <Navigate to="/mentor/dashboard" replace />;
-  if (role === 'nominator') return <Navigate to="/nominator/cohorts" replace />;
+  if (role === 'nominator') return <Navigate to="/nominator/dashboard" replace />;
   return <Navigate to="/login" replace />;
 }
 
@@ -59,6 +59,7 @@ export function App() {
                 <Route path="/admin/dashboard" element={<Navigate to="/admin/cohorts" replace />} />
                 <Route path="/admin/cohorts" element={<CohortsList />} />
                 <Route path="/admin/cohorts/:id" element={<CohortDetail />} />
+                <Route path="/admin/nominations" element={<Nominations />} />
                 <Route path="/admin/training-templates" element={<TrainingTemplates />} />
                 <Route path="/admin/feedback-templates" element={<FeedbackTemplates />} />
                 <Route path="/admin/reports" element={<AdminReports />} />
@@ -78,8 +79,9 @@ export function App() {
 
               {/* Nominator Routes */}
               <Route element={<ProtectedRoute allowedRoles={['nominator']} />}>
-                <Route path="/nominator/cohorts" element={<NominatorDashboard />} />
-                <Route path="/nominator/cohorts/:id/nominations" element={<CohortNominate />} />
+                <Route path="/nominator/dashboard" element={<NominatorDashboard />} />
+                {/* Old bookmarks: nominators no longer have cohort pages */}
+                <Route path="/nominator/cohorts" element={<Navigate to="/nominator/dashboard" replace />} />
               </Route>
 
               {/* Root Fallback */}

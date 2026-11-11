@@ -19,7 +19,6 @@ class CohortBase(BaseModel):
     description: Optional[str] = ""
     startDate: str
     endDate: str
-    nominatorIds: List[str] = []
     talentnextCourses: List[TalentNextCourseAssignment] = []
 
 class CohortCreate(CohortBase):
@@ -34,7 +33,6 @@ class CohortUpdate(BaseModel):
     description: Optional[str] = None
     startDate: Optional[str] = None
     endDate: Optional[str] = None
-    nominatorIds: Optional[List[str]] = None
     talentnextCourses: Optional[List[TalentNextCourseAssignment]] = None
     totalWeeks: Optional[int] = None
 

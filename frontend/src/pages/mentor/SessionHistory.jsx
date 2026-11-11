@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { CalendarDays, Clock3, MapPin, Video, Users, ChevronDown } from 'lucide-react';
 import api from '../../api/client';
 import { Modal } from '../../components/Modal';
+import { DataTable, PersonCell } from '../../components/DataTable';
 import { useToast } from '../../context/ToastContext';
 
 const statusStyles = {
@@ -241,30 +242,35 @@ export default function SessionHistory() {
               <p className="font-semibold text-slate-800">{sessionDetails.batchName}</p>
               <p>{formatDate(sessionDetails.sessionDate)} · {sessionDetails.startTime}–{sessionDetails.endTime}</p>
             </div>
-            <div className="space-y-2">
-              {sessionDetails.roster.map((trainee) => (
-                <div key={trainee.traineeId} className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 rounded-xl border border-slate-200 p-3">
-                  <div className="min-w-0">
-                    <p className="text-sm font-semibold text-slate-800">{trainee.name}</p>
-                    <p className="text-xs text-slate-500">{trainee.email}{trainee.location ? ` · ${trainee.location}` : ''}</p>
-                  </div>
-                  <div className="flex shrink-0 gap-2" role="group" aria-label={`Attendance for ${trainee.name}`}>
-                    <button
-                      type="button"
-                      aria-pressed={attendanceStatuses[trainee.traineeId] === 'present'}
-                      onClick={() => setAttendanceStatuses((current) => ({ ...current, [trainee.traineeId]: 'present' }))}
-                      className={`rounded-lg border px-3 py-2 text-sm font-semibold transition-colors ${attendanceStatuses[trainee.traineeId] === 'present' ? 'border-emerald-600 bg-emerald-600 text-white' : 'border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100'}`}
-                    >Present</button>
-                    <button
-                      type="button"
-                      aria-pressed={attendanceStatuses[trainee.traineeId] === 'absent'}
-                      onClick={() => setAttendanceStatuses((current) => ({ ...current, [trainee.traineeId]: 'absent' }))}
-                      className={`rounded-lg border px-3 py-2 text-sm font-semibold transition-colors ${attendanceStatuses[trainee.traineeId] === 'absent' ? 'border-rose-600 bg-rose-600 text-white' : 'border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100'}`}
-                    >Absent</button>
-                  </div>
-                </div>
-              ))}
-            </div>
+            <DataTable
+              rows={sessionDetails.roster}
+              rowKey={(trainee) => trainee.traineeId}
+              pageSize={10}
+              columns={[
+                { key: 'name', header: 'Trainee', render: (trainee) => <PersonCell primary={trainee.name} secondary={trainee.email} /> },
+                { key: 'location', header: 'Location', render: (trainee) => trainee.location || '—' },
+                {
+                  key: 'attendance',
+                  header: 'Attendance',
+                  render: (trainee) => (
+                    <div className="flex shrink-0 gap-2" role="group" aria-label={`Attendance for ${trainee.name}`}>
+                      <button
+                        type="button"
+                        aria-pressed={attendanceStatuses[trainee.traineeId] === 'present'}
+                        onClick={() => setAttendanceStatuses((current) => ({ ...current, [trainee.traineeId]: 'present' }))}
+                        className={`rounded-lg border px-3 py-1.5 text-sm font-semibold transition-colors ${attendanceStatuses[trainee.traineeId] === 'present' ? 'border-emerald-600 bg-emerald-600 text-white' : 'border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100'}`}
+                      >Present</button>
+                      <button
+                        type="button"
+                        aria-pressed={attendanceStatuses[trainee.traineeId] === 'absent'}
+                        onClick={() => setAttendanceStatuses((current) => ({ ...current, [trainee.traineeId]: 'absent' }))}
+                        className={`rounded-lg border px-3 py-1.5 text-sm font-semibold transition-colors ${attendanceStatuses[trainee.traineeId] === 'absent' ? 'border-rose-600 bg-rose-600 text-white' : 'border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100'}`}
+                      >Absent</button>
+                    </div>
+                  ),
+                },
+              ]}
+            />
             <div className="flex justify-end gap-2 pt-2">
               <button type="button" onClick={() => setExpandedSessionId(null)} className="rounded-lg bg-slate-100 px-4 py-2 text-sm font-semibold text-slate-700 hover:bg-slate-200">Close</button>
               <button

@@ -8,7 +8,7 @@ from starlette.exceptions import HTTPException as StarletteHTTPException
 from app.core.config import settings
 from app.core.db import connect_to_mongo, close_mongo_connection
 from app.routers import (
-    auth, users, cohorts, nominations, assignments, templates, mentor, dashboards, talentnext, admin_users, nominator, nominations_v2, batches, sessions
+    auth, users, cohorts, nominations, assignments, templates, mentor, dashboards, talentnext, admin_users, nominator, batches, sessions
 )
 
 @asynccontextmanager
@@ -75,7 +75,6 @@ app.include_router(auth.router, prefix=api_prefix)
 app.include_router(users.router, prefix=api_prefix)
 app.include_router(cohorts.router, prefix=api_prefix)
 app.include_router(nominations.router, prefix=api_prefix)
-app.include_router(nominations_v2.router, prefix=api_prefix)
 app.include_router(batches.router, prefix=api_prefix)
 app.include_router(sessions.router, prefix=api_prefix)
 app.include_router(assignments.router, prefix=api_prefix)

@@ -25,6 +25,10 @@ services:
       mongo:
         condition: service_healthy
     environment:
+      # The backend Dockerfile starts uvicorn on ${PORT:-10000}.
+      # Setting PORT=8000 here makes the container listen on 8000, so the
+      # port mapping, healthcheck and nginx proxy below all agree.
+      PORT: "8000"
       MONGODB_URL: mongodb://mongo:27017
       DATABASE_NAME: ${DATABASE_NAME:-cohort_manager}
       JWT_SECRET: ${JWT_SECRET:-local-development-only-change-before-deployment}

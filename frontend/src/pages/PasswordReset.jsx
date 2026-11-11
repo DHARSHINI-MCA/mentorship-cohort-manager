@@ -25,7 +25,7 @@ export default function PasswordReset() {
   const navigateToHome = (role) => {
     if (role === 'admin') navigate('/admin/cohorts', { replace: true });
     else if (role === 'mentor') navigate('/mentor/dashboard', { replace: true });
-    else navigate('/nominator/cohorts', { replace: true });
+    else navigate('/nominator/dashboard', { replace: true });
   };
 
   // Password strength checker

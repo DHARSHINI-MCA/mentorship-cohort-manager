@@ -87,7 +87,7 @@ export function Navbar() {
                       : 'text-slate-500 hover:text-slate-800'
                   }`}
                 >
-                  My Cohorts
+                  Nominations
                 </Link>
               )}
             </nav>

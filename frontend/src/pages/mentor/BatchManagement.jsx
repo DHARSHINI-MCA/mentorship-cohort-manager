@@ -4,9 +4,19 @@ import api from '../../api/client';
 import { useToast } from '../../context/ToastContext';
 import { Card } from '../../components/Card';
 import { Modal } from '../../components/Modal';
+import { DataTable, PersonCell } from '../../components/DataTable';
 import '../../styles/BatchManagement.css';
 
 const MISSING_LOCATION = '__missing_location__';
+
+// Table columns shared by both "choose trainees" pickers
+const pickerColumns = [
+  { key: 'name', header: 'Trainee', render: (trainee) => <PersonCell primary={trainee.name} secondary={trainee.email} /> },
+  { key: 'employeeId', header: 'Employee ID', render: (trainee) => <span className="font-mono text-xs">{trainee.employeeId || '—'}</span> },
+  { key: 'location', header: 'Location', render: (trainee) => trainee.location || 'Not provided' },
+  { key: 'timezone', header: 'Time zone', render: (trainee) => <span className="text-xs text-slate-500">{trainee.timezone || '—'}</span> },
+  { key: 'progress', header: 'Progress', render: (trainee) => `${Math.round(trainee.percentComplete || 0)}%` },
+];
 
 export default function BatchManagement() {
   const { showToast } = useToast();
@@ -495,32 +505,14 @@ export default function BatchManagement() {
             ) : filteredUnbatchedTrainees.length === 0 ? (
               <p className="batch-trainee-empty">No trainees match these filters.</p>
             ) : (
-              <div className="batch-trainee-options">
-                {filteredUnbatchedTrainees.map((trainee) => {
-                  const isSelected = selectedTraineeIds.includes(trainee.id);
-                  return (
-                    <label key={trainee.id} className={`batch-trainee-option ${isSelected ? 'selected' : ''}`}>
-                      <input
-                        type="checkbox"
-                        checked={isSelected}
-                        onChange={(event) => setSelectedTraineeIds((current) => (
-                          event.target.checked
-                            ? [...current, trainee.id]
-                            : current.filter((id) => id !== trainee.id)
-                        ))}
-                      />
-                      <span className="batch-trainee-option-info">
-                        <strong>{trainee.name}</strong>
-                        <span>{trainee.email}{trainee.employeeId ? ` · ${trainee.employeeId}` : ''}</span>
-                        <span className="batch-trainee-location">
-                          Location: {trainee.location || 'Not provided'}
-                          {trainee.timezone ? ` · ${trainee.timezone}` : ''}
-                        </span>
-                      </span>
-                    </label>
-                  );
-                })}
-              </div>
+              <DataTable
+                rows={filteredUnbatchedTrainees}
+                columns={pickerColumns}
+                selectable
+                selectedIds={selectedTraineeIds}
+                onSelectionChange={setSelectedTraineeIds}
+                pageSize={10}
+              />
             )}
           </div>
 
@@ -655,34 +647,50 @@ export default function BatchManagement() {
                     <h4>Trainees ({batchDetails.trainees?.length || 0})</h4>
                   </div>
                   {batchDetails.trainees?.length ? (
-                    <div className="trainees-list">
-                      {batchDetails.trainees.map((trainee) => (
-                        <div key={trainee.traineeId} className="trainee-item">
-                          <div>
-                            <p className="trainee-name">{trainee.name}{trainee.status === 'dropped_out' && <span className="ml-2 rounded-full bg-rose-50 px-2 py-0.5 text-[10px] font-bold text-rose-700">Dropped Out</span>}</p>
-                            <p className="trainee-location">
-                              {trainee.email}{trainee.employeeId ? ` · ${trainee.employeeId}` : ''}
-                            </p>
-                            <p className="trainee-location">
-                              Location: {trainee.location || 'Not provided'} {trainee.timezone && `(${trainee.timezone})`}
-                            </p>
-                            {trainee.dropoutReason && <p className="trainee-location text-rose-600">Reason: {trainee.dropoutReason}</p>}
-                            <p className="trainee-progress">{Math.round(trainee.percentComplete || 0)}% complete</p>
-                          </div>
-                          <button
-                            type="button"
-                            className="btn-remove-trainee"
-                            onClick={() => removeTraineeMutation.mutate({
-                              batchId: currentBatch.id,
-                              traineeId: trainee.traineeId,
-                            })}
-                            disabled={removeTraineeMutation.isPending}
-                          >
-                            Remove
-                          </button>
-                        </div>
-                      ))}
-                    </div>
+                    <DataTable
+                      rows={batchDetails.trainees}
+                      rowKey={(trainee) => trainee.traineeId}
+                      pageSize={10}
+                      columns={[
+                        { key: 'name', header: 'Trainee', render: (trainee) => <PersonCell primary={trainee.name} secondary={trainee.email} /> },
+                        { key: 'employeeId', header: 'Employee ID', render: (trainee) => <span className="font-mono text-xs">{trainee.employeeId || '—'}</span> },
+                        {
+                          key: 'location',
+                          header: 'Location',
+                          render: (trainee) => (
+                            <div>
+                              <div>{trainee.location || 'Not provided'}</div>
+                              {trainee.timezone && <div className="text-xs text-slate-400">{trainee.timezone}</div>}
+                            </div>
+                          ),
+                        },
+                        { key: 'progress', header: 'Progress', render: (trainee) => `${Math.round(trainee.percentComplete || 0)}%` },
+                        {
+                          key: 'status',
+                          header: 'Status',
+                          render: (trainee) => trainee.status === 'dropped_out' ? (
+                            <div>
+                              <span className="rounded-full bg-rose-50 px-2 py-0.5 text-[10px] font-bold text-rose-700">Dropped Out</span>
+                              {trainee.dropoutReason && <p className="mt-1 text-[11px] text-rose-600">{trainee.dropoutReason}</p>}
+                            </div>
+                          ) : <span className="text-xs font-semibold text-emerald-700">Active</span>,
+                        },
+                        {
+                          key: 'remove',
+                          header: '',
+                          render: (trainee) => (
+                            <button
+                              type="button"
+                              className="btn-remove-trainee"
+                              onClick={() => removeTraineeMutation.mutate({ batchId: currentBatch.id, traineeId: trainee.traineeId })}
+                              disabled={removeTraineeMutation.isPending}
+                            >
+                              Remove
+                            </button>
+                          ),
+                        },
+                      ]}
+                    />
                   ) : (
                     <p className="batch-trainee-empty">No trainees are in this group yet.</p>
                   )}
@@ -725,29 +733,14 @@ export default function BatchManagement() {
                     <p className="batch-trainee-empty">No assigned trainees in this cohort.</p>
                   ) : addableFilteredTrainees.length ? (
                     <>
-                      <div className="batch-trainee-options">
-                        {addableFilteredTrainees.map((trainee) => (
-                          <label key={trainee.id} className={`batch-trainee-option ${selectedTraineeIds.includes(trainee.id) ? 'selected' : ''}`}>
-                            <input
-                              type="checkbox"
-                              checked={selectedTraineeIds.includes(trainee.id)}
-                              onChange={(event) => setSelectedTraineeIds((current) => (
-                                event.target.checked
-                                  ? [...current, trainee.id]
-                                  : current.filter((id) => id !== trainee.id)
-                              ))}
-                            />
-                            <span className="batch-trainee-option-info">
-                              <strong>{trainee.name}</strong>
-                              <span>{trainee.email}{trainee.employeeId ? ` · ${trainee.employeeId}` : ''}</span>
-                              <span className="batch-trainee-location">
-                                Location: {trainee.location || 'Not provided'}
-                                {trainee.timezone ? ` · ${trainee.timezone}` : ''}
-                              </span>
-                            </span>
-                          </label>
-                        ))}
-                      </div>
+                      <DataTable
+                        rows={addableFilteredTrainees}
+                        columns={pickerColumns}
+                        selectable
+                        selectedIds={selectedTraineeIds}
+                        onSelectionChange={setSelectedTraineeIds}
+                        pageSize={10}
+                      />
                       <button
                         type="button"
                         className="btn btn-primary batch-add-trainees-button"
@@ -896,29 +889,35 @@ export default function BatchManagement() {
             <p className="session-attendance-date">
               {new Date(attendanceSession.sessionDate).toLocaleDateString()} · {attendanceSession.startTime}–{attendanceSession.endTime}
             </p>
-            {attendanceSession.roster.map((trainee) => (
-              <div className="session-attendance-row" key={trainee.traineeId}>
-                <div>
-                  <strong>{trainee.name}</strong>
-                  <span>{trainee.email}</span>
-                  {trainee.location && <span>{trainee.location}</span>}
-                </div>
-                <div className="attendance-choice-group" role="group" aria-label={`Attendance for ${trainee.name}`}>
-                  <button
-                    type="button"
-                    aria-pressed={attendanceStatuses[trainee.traineeId] === 'present'}
-                    className={`attendance-choice attendance-choice-present ${attendanceStatuses[trainee.traineeId] === 'present' ? 'selected' : ''}`}
-                    onClick={() => setAttendanceStatuses((current) => ({ ...current, [trainee.traineeId]: 'present' }))}
-                  >Present</button>
-                  <button
-                    type="button"
-                    aria-pressed={attendanceStatuses[trainee.traineeId] === 'absent'}
-                    className={`attendance-choice attendance-choice-absent ${attendanceStatuses[trainee.traineeId] === 'absent' ? 'selected' : ''}`}
-                    onClick={() => setAttendanceStatuses((current) => ({ ...current, [trainee.traineeId]: 'absent' }))}
-                  >Absent</button>
-                </div>
-              </div>
-            ))}
+            <DataTable
+              rows={attendanceSession.roster}
+              rowKey={(trainee) => trainee.traineeId}
+              pageSize={10}
+              columns={[
+                { key: 'name', header: 'Trainee', render: (trainee) => <PersonCell primary={trainee.name} secondary={trainee.email} /> },
+                { key: 'location', header: 'Location', render: (trainee) => trainee.location || '—' },
+                {
+                  key: 'attendance',
+                  header: 'Attendance',
+                  render: (trainee) => (
+                    <div className="attendance-choice-group" role="group" aria-label={`Attendance for ${trainee.name}`}>
+                      <button
+                        type="button"
+                        aria-pressed={attendanceStatuses[trainee.traineeId] === 'present'}
+                        className={`attendance-choice attendance-choice-present ${attendanceStatuses[trainee.traineeId] === 'present' ? 'selected' : ''}`}
+                        onClick={() => setAttendanceStatuses((current) => ({ ...current, [trainee.traineeId]: 'present' }))}
+                      >Present</button>
+                      <button
+                        type="button"
+                        aria-pressed={attendanceStatuses[trainee.traineeId] === 'absent'}
+                        className={`attendance-choice attendance-choice-absent ${attendanceStatuses[trainee.traineeId] === 'absent' ? 'selected' : ''}`}
+                        onClick={() => setAttendanceStatuses((current) => ({ ...current, [trainee.traineeId]: 'absent' }))}
+                      >Absent</button>
+                    </div>
+                  ),
+                },
+              ]}
+            />
             <div className="modal-actions">
               <button
                 type="button"

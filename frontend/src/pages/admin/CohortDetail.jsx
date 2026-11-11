@@ -8,6 +8,8 @@ import { Badge } from '../../components/Badge';
 import { ProgressBar } from '../../components/ProgressBar';
 import { EmptyState } from '../../components/EmptyState';
 import { Modal } from '../../components/Modal';
+import { DataTable, PersonCell } from '../../components/DataTable';
+import { AllocateNomineesModal } from '../../components/AllocateNomineesModal';
 import { 
   ArrowLeft, Calendar, Award, Users, Settings, UserPlus, 
   KeyRound, CheckCircle2, Lock, Sparkles, BookOpen, Check,
@@ -15,6 +17,23 @@ import {
   UserCheck, ShieldCheck, Search, Filter, X, Eye, MessageSquare,
   ClipboardList, ChevronRight, Star, ExternalLink, Mail, Copy
 } from 'lucide-react';
+
+// The API returns at most 100 rows per page, so walk every page. A cohort or a
+// mentor can easily have more than 100 people.
+async function fetchAllPages(path) {
+  let page = 1;
+  let pages = 1;
+  let items = [];
+  let total = 0;
+  do {
+    const res = await api.get(path, { params: { limit: 100, page } });
+    items = items.concat(res.data.items || []);
+    total = res.data.total ?? items.length;
+    pages = res.data.pages || 1;
+    page += 1;
+  } while (page <= pages);
+  return { items, total };
+}
 
 export function CohortDetail() {
   const { id: cohortId } = useParams();
@@ -30,14 +49,8 @@ export function CohortDetail() {
   const [assignmentMentorFilter, setAssignmentMentorFilter] = useState('ALL');
 
   // Modals
-  const [isMentorModalOpen, setIsMentorModalOpen] = useState(false);
-  const [isTraineeModalOpen, setIsTraineeModalOpen] = useState(false);
-  const [isNominatorModalOpen, setIsNominatorModalOpen] = useState(false);
-  const [newNominatorName, setNewNominatorName] = useState('');
-  const [newNominatorEmployeeId, setNewNominatorEmployeeId] = useState('');
-  const [newNominatorEmail, setNewNominatorEmail] = useState('');
-  const [createdNominatorCredentials, setCreatedNominatorCredentials] = useState(null);
-  const [selectedNominatorDetails, setSelectedNominatorDetails] = useState(null);
+  const [isAllocateMentorsOpen, setIsAllocateMentorsOpen] = useState(false);
+  const [isAllocateTraineesOpen, setIsAllocateTraineesOpen] = useState(false);
   const [mentorTemporaryCredentials, setMentorTemporaryCredentials] = useState(null);
   const [isActivateModalOpen, setIsActivateModalOpen] = useState(false);
   const [selectedMentorDetails, setSelectedMentorDetails] = useState(null);
@@ -66,10 +79,6 @@ export function CohortDetail() {
   const [expandedTalentNext, setExpandedTalentNext] = useState(true); // TalentNext section expanded by default
 
   // Form states for adding nominee records
-  const [nomineeName, setNomineeName] = useState('');
-  const [nomineeEmail, setNomineeEmail] = useState('');
-  const [nomineeDept, setNomineeDept] = useState('');
-  const [nomineeEmpId, setNomineeEmpId] = useState('');
 
   // Expanded mentor card state
   const [expandedMentorId, setExpandedMentorId] = useState(null);
@@ -137,8 +146,7 @@ export function CohortDetail() {
   const { data: mentorsData, isLoading: mentorsLoading } = useQuery({
     queryKey: ['cohortMentors', cohortId],
     queryFn: async () => {
-      const res = await api.get(`/cohorts/${cohortId}/mentors?limit=100`);
-      return res.data;
+      return await fetchAllPages(`/cohorts/${cohortId}/mentors`);
     },
   });
 
@@ -151,37 +159,11 @@ export function CohortDetail() {
     enabled: activeTab === 'nominations' && !!cohortId,
   });
 
-  const { data: cohortNominators = [], isLoading: cohortNominatorsLoading } = useQuery({
-    queryKey: ['cohortNominators', cohortId],
-    queryFn: async () => {
-      const res = await api.get(`/users/cohorts/${cohortId}/nominators`);
-      return res.data || [];
-    },
-    enabled: activeTab === 'nominators' && !!cohortId,
-  });
-
-  const { data: nominatorSubmissions, isLoading: nominatorSubmissionsLoading } = useQuery({
-    queryKey: ['cohortNominatorSubmissions', cohortId, selectedNominatorDetails?.id],
-    queryFn: async () => {
-      const [mentorsResponse, traineesResponse] = await Promise.all([
-        api.get(`/cohorts/${cohortId}/mentors?limit=100`),
-        api.get(`/cohorts/${cohortId}/trainees?limit=100`),
-      ]);
-      const nominatorId = String(selectedNominatorDetails.id);
-      return {
-        mentors: (mentorsResponse.data?.items || []).filter((item) => String(item.nominatedBy) === nominatorId),
-        trainees: (traineesResponse.data?.items || []).filter((item) => String(item.nominatedBy) === nominatorId),
-      };
-    },
-    enabled: !!selectedNominatorDetails?.id,
-  });
-
   // 3. Fetch Trainees
   const { data: traineesData, isLoading: traineesLoading } = useQuery({
     queryKey: ['cohortTrainees', cohortId],
     queryFn: async () => {
-      const res = await api.get(`/cohorts/${cohortId}/trainees?limit=100`);
-      return res.data;
+      return await fetchAllPages(`/cohorts/${cohortId}/trainees`);
     },
   });
 
@@ -303,26 +285,6 @@ export function CohortDetail() {
     },
   });
 
-  const createCohortNominatorMutation = useMutation({
-    mutationFn: async (payload) => {
-      const res = await api.post(`/users/cohorts/${cohortId}/nominators`, payload);
-      return res.data;
-    },
-    onSuccess: (result) => {
-      queryClient.invalidateQueries({ queryKey: ['cohortNominators', cohortId] });
-      queryClient.invalidateQueries({ queryKey: ['cohort', cohortId] });
-      setIsNominatorModalOpen(false);
-      setCreatedNominatorCredentials(result);
-      setNewNominatorName('');
-      setNewNominatorEmployeeId('');
-      setNewNominatorEmail('');
-      showToast('Nominator created. Share the temporary password securely.');
-    },
-    onError: (err) => {
-      showToast(err.response?.data?.detail || 'Failed to create nominator', 'error');
-    },
-  });
-
   const extendWeeksMutation = useMutation({
     mutationFn: async (payload) => {
       const res = await api.post(`/cohorts/${cohortId}/extend-timeline`, payload);
@@ -377,44 +339,6 @@ export function CohortDetail() {
     },
   });
 
-  const nominateMentorMutation = useMutation({
-    mutationFn: async (payload) => {
-      return await api.post(`/cohorts/${cohortId}/mentors`, payload);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['cohortMentors', cohortId] });
-      queryClient.invalidateQueries({ queryKey: ['cohort', cohortId] });
-      showToast('Mentor added to cohort');
-      setIsMentorModalOpen(false);
-      setNomineeName('');
-      setNomineeEmail('');
-      setNomineeDept('');
-      setNomineeEmpId('');
-    },
-    onError: (err) => {
-      showToast(err.response?.data?.detail || 'Failed to add mentor', 'error');
-    },
-  });
-
-  const nominateTraineeMutation = useMutation({
-    mutationFn: async (payload) => {
-      return await api.post(`/cohorts/${cohortId}/trainees`, payload);
-    },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['cohortTrainees', cohortId] });
-      queryClient.invalidateQueries({ queryKey: ['cohort', cohortId] });
-      showToast('Trainee added to cohort');
-      setIsTraineeModalOpen(false);
-      setNomineeName('');
-      setNomineeEmail('');
-      setNomineeDept('');
-      setNomineeEmpId('');
-    },
-    onError: (err) => {
-      showToast(err.response?.data?.detail || 'Failed to add trainee', 'error');
-    },
-  });
-
   const activateLoginMutation = useMutation({
     mutationFn: async () => {
       const response = await api.post(`/mentors/${targetMentor.id}/activate-login`);
@@ -463,11 +387,6 @@ export function CohortDetail() {
     },
     onSuccess: (_result, variables) => {
       queryClient.invalidateQueries({ queryKey: ['cohortMentors', cohortId] });
-      queryClient.invalidateQueries({ queryKey: ['cohortNominators', cohortId] });
-      queryClient.invalidateQueries({ queryKey: ['nominatorsList'] });
-      setSelectedNominatorDetails((current) => current?.id === variables.userId
-        ? { ...current, isActive: variables.isActive }
-        : current);
       showToast(`Account ${variables.isActive ? 'activated' : 'deactivated'}`);
     },
     onError: (err) => showToast(err.response?.data?.detail || 'Failed to update account status', 'error'),
@@ -655,7 +574,6 @@ export function CohortDetail() {
           { key: 'nominations', label: `Mentor Details`, icon: Users },
           { key: 'assignments', label: `Assign Mentors (${cohort.assignedTraineeCount || 0}/${cohort.traineeCount || 0})`, icon: Award },
           { key: 'talentnext', label: `TalentNext (${cohort?.talentnextCourses?.length || 0})`, icon: Sparkles },
-          { key: 'nominators', label: `Nominators (${cohortNominators.length})`, icon: UserCheck },
         ].map((tab) => {
           const Icon = tab.icon;
           const isSelected = activeTab === tab.key;
@@ -862,24 +780,31 @@ export function CohortDetail() {
       {/* TAB 2: NOMINEES (MENTORS + ALLOCATED TRAINEES) */}
       {activeTab === 'nominations' && (
         <div className="space-y-6">
-          {/* Header Controls: Title & Top Action Buttons */}
           <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
             <div>
               <h3 className="text-base font-bold text-slate-800">Mentors & Assigned Trainees</h3>
-              <p className="text-xs text-slate-500">Nominator-submitted candidates and their assignments</p>
+              <p className="text-xs text-slate-500">Mentors in this cohort. Add more from the nominations list.</p>
             </div>
+            <button
+              type="button"
+              onClick={() => setIsAllocateMentorsOpen(true)}
+              disabled={isLocked}
+              className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-emerald-600 px-4 py-2.5 text-xs font-bold text-white shadow-sm hover:bg-emerald-700 disabled:opacity-50"
+            >
+              <UserPlus className="w-4 h-4" />
+              <span>Add Mentors from Nominations</span>
+            </button>
           </div>
 
           {/* Search & Filter Bar */}
           <div className="p-3.5 bg-slate-50/90 rounded-2xl border border-slate-200/90 flex flex-col md:flex-row items-center gap-3">
-            {/* Search Input */}
             <div className="relative flex-1 w-full">
               <Search className="w-4 h-4 text-slate-400 absolute left-3.5 top-1/2 -translate-y-1/2" />
               <input
                 type="text"
                 value={searchTerm}
                 onChange={(e) => setSearchTerm(e.target.value)}
-                placeholder="Search by mentor name, mentee name, employee ID, or department..."
+                placeholder="Search by mentor name, trainee name, employee ID or email..."
                 className="w-full pl-10 pr-9 py-2 text-xs font-medium rounded-xl border border-slate-200 bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500 shadow-xs"
               />
               {searchTerm && (
@@ -892,17 +817,15 @@ export function CohortDetail() {
                 </button>
               )}
             </div>
-
             <div className="flex items-center gap-2 w-full md:w-auto">
-              {/* Mentee Status Filter */}
               <select
                 value={assignmentFilter}
                 onChange={(e) => setAssignmentFilter(e.target.value)}
                 className="w-full md:w-44 px-3 py-2 text-xs font-semibold rounded-xl border border-slate-200 bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500 shadow-xs"
               >
                 <option value="ALL">All Mentors</option>
-                <option value="ASSIGNED">With Mentees</option>
-                <option value="UNASSIGNED">No Mentees Yet</option>
+                <option value="ASSIGNED">With Trainees</option>
+                <option value="UNASSIGNED">No Trainees Yet</option>
               </select>
             </div>
           </div>
@@ -932,11 +855,11 @@ export function CohortDetail() {
                   </button>
                 ) : (
                   <button
-                    onClick={() => setIsMentorModalOpen(true)}
-                    className="px-4 py-2 bg-emerald-600 hover:bg-emerald-700 text-white rounded-xl text-xs font-bold flex items-center gap-1.5"
+                    type="button"
+                    onClick={() => setSelectedMentorDetails(mentor)}
+                    className="inline-flex items-center gap-1.5 rounded-lg bg-indigo-600 px-3 py-1.5 text-xs font-bold text-white hover:bg-indigo-700"
                   >
-                    <UserPlus className="w-3.5 h-3.5" />
-                    <span>Add First Mentor</span>
+                    <Eye className="w-3.5 h-3.5" /> Details
                   </button>
                 )
               }
@@ -1302,11 +1225,23 @@ export function CohortDetail() {
       {/* TAB 3: ASSIGNMENTS (ADMIN ONLY ASSIGNS MENTOR TO TRAINEE) */}
       {activeTab === 'assignments' && (
         <div className="space-y-6">
-          <div>
-            <h3 className="text-base font-bold text-slate-800">Assign Mentor to Trainee</h3>
-            <p className="text-xs text-slate-500">
-              Select a mentor from the dropdown for each trainee. The system automatically creates or updates the trainee's progress tracking document.
-            </p>
+          <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+            <div>
+              <h3 className="text-base font-bold text-slate-800">Assign Mentor to Trainee</h3>
+              <p className="text-xs text-slate-500">
+                Add trainees from the nominations list, then pick a mentor for each one. Any mentor in this cohort can be assigned to any trainee.
+                The system creates or updates the trainee's progress tracking automatically.
+              </p>
+            </div>
+            <button
+              type="button"
+              onClick={() => setIsAllocateTraineesOpen(true)}
+              disabled={isLocked}
+              className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-xl bg-emerald-600 px-4 py-2.5 text-xs font-bold text-white shadow-sm hover:bg-emerald-700 disabled:opacity-50"
+            >
+              <UserPlus className="w-4 h-4" />
+              <span>Add Trainees from Nominations</span>
+            </button>
           </div>
 
           <div className="grid grid-cols-1 gap-3 rounded-xl border border-slate-200 bg-slate-50 p-3 md:grid-cols-[minmax(220px,1fr)_minmax(220px,1fr)_220px]">
@@ -1384,12 +1319,10 @@ export function CohortDetail() {
                       <td className="px-4 py-3">
                       <select
                         value={currentMentorId}
-                        disabled={trainee.status === 'dropped_out'}
+                        disabled={trainee.status === 'dropped_out' || isLocked}
                         onChange={(e) => {
                           const mentorId = e.target.value;
-                          if (mentorId) {
-                            assignMentorMutation.mutate({ traineeId: trainee.id, mentorId });
-                          }
+                          if (mentorId) assignMentorMutation.mutate({ traineeId: trainee.id, mentorId });
                         }}
                         className="w-72 max-w-full px-3 py-2 text-xs font-semibold rounded-lg border border-slate-200 bg-white focus:outline-none focus:ring-2 focus:ring-emerald-500 disabled:cursor-not-allowed disabled:bg-slate-100"
                       >
@@ -1401,7 +1334,7 @@ export function CohortDetail() {
                         )}
                         {assignableMentors.filter((mentor) => mentor.id === currentMentorId || mentorOptionsForAssignment.some((option) => option.id === mentor.id)).map((m) => (
                           <option key={m.id} value={m.id}>
-                            {m.name} ({m.employeeId || 'EMP'}) &bull; {m.assignedTraineesCount} trainees
+                            {m.name} ({m.employeeId || 'EMP'}) · {m.assignedTraineesCount} trainees
                           </option>
                         ))}
                       </select>
@@ -1663,242 +1596,195 @@ export function CohortDetail() {
       </Modal>
 
 
-      <Modal
-        isOpen={isNominatorModalOpen}
-        onClose={() => setIsNominatorModalOpen(false)}
-        title="Create Cohort Nominator"
-        maxWidth="max-w-lg"
-      >
-        <form
-          className="space-y-4"
-          onSubmit={(event) => {
-            event.preventDefault();
-            createCohortNominatorMutation.mutate({
-              name: newNominatorName.trim(),
-              employeeId: newNominatorEmployeeId.trim(),
-              email: newNominatorEmail.trim(),
-            });
-          }}
-        >
-          <div>
-            <label className="mb-1.5 block text-xs font-bold uppercase tracking-wide text-slate-700">Name *</label>
-            <input required value={newNominatorName} onChange={(event) => setNewNominatorName(event.target.value)} placeholder="Full name" className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500" />
-          </div>
-          <div>
-            <label className="mb-1.5 block text-xs font-bold uppercase tracking-wide text-slate-700">Employee ID *</label>
-            <input required value={newNominatorEmployeeId} onChange={(event) => setNewNominatorEmployeeId(event.target.value)} placeholder="Employee ID" className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500" />
-          </div>
-          <div>
-            <label className="mb-1.5 block text-xs font-bold uppercase tracking-wide text-slate-700">Email *</label>
-            <input required type="email" value={newNominatorEmail} onChange={(event) => setNewNominatorEmail(event.target.value)} placeholder="name@example.com" className="w-full rounded-xl border border-slate-200 px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-emerald-500" />
-          </div>
-          <p className="rounded-xl bg-amber-50 p-3 text-xs leading-relaxed text-amber-800">A temporary password based on the name and employee ID will be generated. The nominator must change it after signing in for the first time.</p>
-          <div className="flex justify-end gap-2 border-t border-slate-100 pt-4">
-            <button type="button" onClick={() => setIsNominatorModalOpen(false)} className="rounded-xl px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100">Cancel</button>
-            <button type="submit" disabled={createCohortNominatorMutation.isPending} className="rounded-xl bg-emerald-600 px-5 py-2.5 text-xs font-bold text-white hover:bg-emerald-700 disabled:opacity-50">
-              {createCohortNominatorMutation.isPending ? 'Creating…' : 'Create Nominator'}
-            </button>
-          </div>
-        </form>
-      </Modal>
+      {/* MODAL: Add nominated mentors / trainees to this cohort */}
+      <AllocateNomineesModal
+        isOpen={isAllocateMentorsOpen}
+        onClose={() => setIsAllocateMentorsOpen(false)}
+        kind="mentor"
+        cohortId={cohortId}
+        cohortName={cohort.name}
+      />
+      <AllocateNomineesModal
+        isOpen={isAllocateTraineesOpen}
+        onClose={() => setIsAllocateTraineesOpen(false)}
+        kind="trainee"
+        cohortId={cohortId}
+        cohortName={cohort.name}
+      />
 
-      <Modal
-        isOpen={!!createdNominatorCredentials}
-        onClose={() => setCreatedNominatorCredentials(null)}
-        title="Nominator Created"
-        maxWidth="max-w-lg"
-      >
-        {createdNominatorCredentials && (
-          <div className="space-y-4">
-            <div>
-              <p className="text-sm font-semibold text-slate-800">{createdNominatorCredentials.nominator.name}</p>
-              <p className="text-xs text-slate-500">{createdNominatorCredentials.nominator.email} · {createdNominatorCredentials.nominator.employeeId}</p>
-            </div>
-            <div className="rounded-xl border border-emerald-200 bg-emerald-50 p-4">
-              <label className="mb-2 block text-xs font-bold uppercase tracking-wide text-emerald-800">Temporary password — show once</label>
-              <div className="flex items-center gap-2">
-                <code className="min-w-0 flex-1 break-all rounded-lg bg-white px-3 py-2 text-sm font-bold text-slate-800">{createdNominatorCredentials.temporaryPassword}</code>
+      {/* MODAL: Mentor details */}
+      {detailMentor && (
+        <Modal
+          isOpen
+          onClose={() => setSelectedMentorDetails(null)}
+          title={`Mentor Details · ${detailMentor.name}`}
+          maxWidth="max-w-5xl"
+        >
+          <div className="space-y-5">
+            <section className="grid sm:grid-cols-2 gap-3 rounded-xl bg-slate-50 border border-slate-100 p-4 text-sm">
+              <div><span className="text-slate-500">Employee ID</span><p className="font-semibold text-slate-800">{detailMentor.employeeId || 'Not provided'}</p></div>
+              <div><span className="text-slate-500">Email</span><p className="font-semibold text-slate-800">{detailMentor.email}</p></div>
+              <div><span className="text-slate-500">Location</span><p className="font-semibold text-slate-800">{detailMentor.location || 'Not provided'}{detailMentor.timezone ? ` · ${detailMentor.timezone}` : ''}</p></div>
+              <div><span className="text-slate-500">Login</span><p className="font-semibold text-slate-800">{!detailMentor.isLoginActive ? 'Not activated' : !detailMentor.isAccountActive ? 'Inactive' : detailMentor.firstLoginPasswordReset ? 'Password setup pending' : 'Active'}</p></div>
+              <div><span className="text-slate-500">Nominated by</span><p className="font-semibold text-slate-800">{detailMentor.nominatorName || 'Platform Administrator'}</p></div>
+              <div><span className="text-slate-500">Nominated on</span><p className="font-semibold text-slate-800">{detailMentor.createdAt ? new Date(detailMentor.createdAt).toLocaleDateString() : 'Not provided'}</p></div>
+            </section>
+
+            {detailMentor.isLoginActive && detailMentor.userId && (
+              <div className="flex flex-col gap-2 rounded-xl border border-amber-200 bg-amber-50 p-4 sm:flex-row sm:items-center sm:justify-between">
+                <div>
+                  <p className="text-sm font-bold text-amber-900">Mentor login credentials</p>
+                  <p className="mt-0.5 text-xs text-amber-800">Passwords are stored securely and cannot be viewed. Reset to generate a one-time temporary password.</p>
+                </div>
                 <button
                   type="button"
-                  onClick={async () => {
-                    try {
-                      await navigator.clipboard.writeText(createdNominatorCredentials.temporaryPassword);
-                      showToast('Temporary password copied');
-                    } catch {
-                      showToast('Could not copy the password. Select and copy it manually.', 'warning');
-                    }
-                  }}
-                  className="inline-flex shrink-0 items-center gap-1.5 rounded-lg border border-emerald-200 bg-white px-3 py-2 text-xs font-bold text-emerald-800 hover:bg-emerald-100"
+                  onClick={() => resetMentorPasswordMutation.mutate(detailMentor.userId)}
+                  disabled={resetMentorPasswordMutation.isPending}
+                  className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-lg bg-amber-700 px-3 py-2 text-xs font-bold text-white hover:bg-amber-800 disabled:opacity-50"
                 >
-                  <Copy className="h-3.5 w-3.5" /> Copy
+                  <KeyRound className="h-3.5 w-3.5" />
+                  {resetMentorPasswordMutation.isPending ? 'Generating…' : 'Reset password'}
                 </button>
               </div>
-            </div>
-            <p className="text-xs leading-relaxed text-slate-500">Share this password securely. It will not be shown again. On first login, the nominator must enter it as their current password and create a new password.</p>
-            <div className="flex justify-end border-t border-slate-100 pt-4">
-              <button type="button" onClick={() => setCreatedNominatorCredentials(null)} className="rounded-xl bg-slate-800 px-5 py-2.5 text-xs font-bold text-white hover:bg-slate-900">Done</button>
-            </div>
-          </div>
-        )}
-      </Modal>
+            )}
 
-      {/* MODAL: Add Mentor */}
-      <Modal isOpen={isMentorModalOpen} onClose={() => setIsMentorModalOpen(false)} title="Add Mentor">
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            nominateMentorMutation.mutate({
-              name: nomineeName,
-              email: nomineeEmail,
-              employeeId: nomineeEmpId,
-              department: nomineeDept,
-            });
-          }}
-          className="space-y-4"
-        >
-          <div>
-            <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">Mentor Name</label>
-            <input
-              type="text"
-              required
-              value={nomineeName}
-              onChange={(e) => setNomineeName(e.target.value)}
-              placeholder="e.g. Alex Rivera"
-              className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs focus:ring-2 focus:ring-emerald-500"
-            />
-          </div>
-          <div>
-            <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">Email</label>
-            <input
-              type="email"
-              required
-              value={nomineeEmail}
-              onChange={(e) => setNomineeEmail(e.target.value)}
-              placeholder="alex.rivera@example.com"
-              className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs focus:ring-2 focus:ring-emerald-500"
-            />
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">Employee ID</label>
-              <input
-                type="text"
-                required
-                value={nomineeEmpId}
-                onChange={(e) => setNomineeEmpId(e.target.value)}
-                placeholder="EMP-MTR-05"
-                className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs focus:ring-2 focus:ring-emerald-500"
+            <section>
+              <div className="flex items-center justify-between mb-3">
+                <h4 className="font-bold text-slate-800">Allocated Trainees</h4>
+                <span className="text-xs font-semibold text-purple-700">{detailActiveTrainees.length} active · {detailDroppedOut} dropped out</span>
+              </div>
+              <DataTable
+                rows={detailTrainees}
+                emptyMessage="No trainees assigned."
+                pageSize={10}
+                columns={[
+                  { key: 'name', header: 'Trainee', render: (t) => <PersonCell primary={t.name} secondary={t.email} /> },
+                  { key: 'employeeId', header: 'Employee ID', render: (t) => <span className="font-mono text-xs">{t.employeeId || '—'}</span> },
+                  { key: 'location', header: 'Location', render: (t) => t.location || '—' },
+                  {
+                    key: 'progress',
+                    header: 'Progress',
+                    className: 'min-w-[120px]',
+                    render: (t) => (
+                      <div className="flex items-center gap-2">
+                        <div className="flex-1"><ProgressBar percent={t.percentComplete || 0} size="sm" showLabel={false} /></div>
+                        <span className="text-xs font-bold w-9 text-right">{Math.round(t.percentComplete || 0)}%</span>
+                      </div>
+                    ),
+                  },
+                  {
+                    key: 'status',
+                    header: 'Status',
+                    render: (t) =>
+                      t.status === 'dropped_out' ? (
+                        <div>
+                          <Badge variant="danger">Dropped out</Badge>
+                          {t.dropoutReason && <p className="mt-1 text-[11px] text-rose-600">{t.dropoutReason}</p>}
+                        </div>
+                      ) : (
+                        <Badge variant="active">Active</Badge>
+                      ),
+                  },
+                  {
+                    key: 'feedback',
+                    header: '',
+                    render: (t) => (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          setSelectedTraineeForFeedback({
+                            ...t,
+                            mentorName: detailMentor.name,
+                            mentorEmployeeId: detailMentor.employeeId,
+                            mentorEmail: detailMentor.email,
+                            mentorDepartment: detailMentor.department,
+                            mentorNominatedBy: detailMentor.nominatorName,
+                          });
+                          setIsTraineeFeedbackModalOpen(true);
+                        }}
+                        className="inline-flex items-center gap-1 text-xs font-bold text-purple-700 hover:text-purple-900 whitespace-nowrap"
+                      >
+                        <Eye className="w-3.5 h-3.5" /> Details & feedback
+                      </button>
+                    ),
+                  },
+                ]}
               />
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">Department</label>
-              <input
-                type="text"
-                required
-                value={nomineeDept}
-                onChange={(e) => setNomineeDept(e.target.value)}
-                placeholder="Core Infrastructure"
-                className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs focus:ring-2 focus:ring-emerald-500"
-              />
-            </div>
-          </div>
-          <div className="pt-3 border-t border-slate-100 flex justify-end gap-2">
-            <button
-              type="button"
-              onClick={() => setIsMentorModalOpen(false)}
-              className="px-4 py-2 text-xs font-bold text-slate-600 rounded-xl"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={nominateMentorMutation.isPending}
-              className="px-4 py-2 bg-emerald-600 text-white rounded-xl text-xs font-bold disabled:opacity-50"
-            >
-              Add Mentor
-            </button>
-          </div>
-        </form>
-      </Modal>
+            </section>
 
-      {/* MODAL: Add Trainee */}
-      <Modal isOpen={isTraineeModalOpen} onClose={() => setIsTraineeModalOpen(false)} title="Add Trainee">
-        <form
-          onSubmit={(e) => {
-            e.preventDefault();
-            nominateTraineeMutation.mutate({
-              name: nomineeName,
-              email: nomineeEmail,
-              employeeId: nomineeEmpId,
-              department: nomineeDept,
-            });
-          }}
-          className="space-y-4"
-        >
-          <div>
-            <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">Trainee Name</label>
-            <input
-              type="text"
-              required
-              value={nomineeName}
-              onChange={(e) => setNomineeName(e.target.value)}
-              placeholder="e.g. Jordan Lee"
-              className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs focus:ring-2 focus:ring-emerald-500"
-            />
+            <section>
+              <div className="flex items-center justify-between mb-3">
+                <h4 className="font-bold text-slate-800">Training Groups & Sessions</h4>
+                <span className="text-xs text-slate-500">{detailBatches.length} groups · {detailSessionCount} sessions</span>
+              </div>
+              {cohortSessionOverviewLoading ? (
+                <p className="text-sm text-slate-500">Loading group and session details…</p>
+              ) : detailBatches.length ? (
+                <div className="space-y-4">
+                  {detailBatches.map((batch) => (
+                    <div key={batch.id} className="rounded-xl border border-emerald-100 bg-emerald-50/40 p-4 space-y-3">
+                      <div className="flex items-center justify-between gap-3">
+                        <h5 className="font-bold text-slate-800">{batch.name}</h5>
+                        <span className="text-xs text-slate-500">{batch.traineeCount} trainees</span>
+                      </div>
+                      <DataTable
+                        rows={batch.trainees}
+                        rowKey={(t) => t.traineeId}
+                        emptyMessage="No trainees in this group."
+                        pageSize={10}
+                        columns={[
+                          { key: 'name', header: 'Trainee', render: (t) => <PersonCell primary={t.name} secondary={t.email} /> },
+                          { key: 'location', header: 'Location', render: (t) => t.location || '—' },
+                          {
+                            key: 'status',
+                            header: 'Status',
+                            render: (t) => t.status === 'dropped_out' ? <Badge variant="danger">Dropped out</Badge> : <Badge variant="active">Active</Badge>,
+                          },
+                        ]}
+                      />
+                      <div className="space-y-2">
+                        {batch.sessions.length ? batch.sessions.map((session) => (
+                          <div key={session.id} className="rounded-lg border border-slate-200 bg-white p-3">
+                            <div className="flex flex-wrap items-start justify-between gap-2">
+                              <div>
+                                <p className="font-bold text-sm text-slate-800">{session.title}</p>
+                                <p className="text-xs text-slate-500">{new Date(session.sessionDate).toLocaleDateString()} · {session.startTime}–{session.endTime}</p>
+                              </div>
+                              <Badge>{session.status?.replace('_', ' ')}</Badge>
+                            </div>
+                            <p className="text-xs text-slate-500 mt-2">Attendance: {session.presentCount} present · {session.attendanceCount}/{session.attendance.length} marked</p>
+                            {session.attendance.length > 0 && (
+                              <div className="mt-2">
+                                <DataTable
+                                  rows={session.attendance}
+                                  rowKey={(record) => record.traineeId}
+                                  pageSize={10}
+                                  columns={[
+                                    { key: 'name', header: 'Trainee' },
+                                    {
+                                      key: 'status',
+                                      header: 'Attendance',
+                                      render: (record) => (
+                                        <span className={`text-xs font-bold capitalize ${record.status === 'present' ? 'text-emerald-600' : record.status === 'absent' ? 'text-rose-600' : 'text-slate-400'}`}>
+                                          {record.status.replace('_', ' ')}
+                                        </span>
+                                      ),
+                                    },
+                                  ]}
+                                />
+                              </div>
+                            )}
+                          </div>
+                        )) : <p className="text-xs text-slate-500">No sessions scheduled for this group.</p>}
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              ) : <p className="text-sm text-slate-500">No training groups created for this mentor.</p>}
+            </section>
           </div>
-          <div>
-            <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">Email</label>
-            <input
-              type="email"
-              required
-              value={nomineeEmail}
-              onChange={(e) => setNomineeEmail(e.target.value)}
-              placeholder="jordan.lee@example.com"
-              className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs focus:ring-2 focus:ring-emerald-500"
-            />
-          </div>
-          <div className="grid grid-cols-2 gap-3">
-            <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">Employee ID</label>
-              <input
-                type="text"
-                required
-                value={nomineeEmpId}
-                onChange={(e) => setNomineeEmpId(e.target.value)}
-                placeholder="EMP-TRN-201"
-                className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs focus:ring-2 focus:ring-emerald-500"
-              />
-            </div>
-            <div>
-              <label className="block text-xs font-bold text-slate-700 uppercase tracking-wider mb-1">Department</label>
-              <input
-                type="text"
-                required
-                value={nomineeDept}
-                onChange={(e) => setNomineeDept(e.target.value)}
-                placeholder="Frontend Engineering"
-                className="w-full px-3 py-2 rounded-xl border border-slate-200 text-xs focus:ring-2 focus:ring-emerald-500"
-              />
-            </div>
-          </div>
-          <div className="pt-3 border-t border-slate-100 flex justify-end gap-2">
-            <button
-              type="button"
-              onClick={() => setIsTraineeModalOpen(false)}
-              className="px-4 py-2 text-xs font-bold text-slate-600 rounded-xl"
-            >
-              Cancel
-            </button>
-            <button
-              type="submit"
-              disabled={nominateTraineeMutation.isPending}
-              className="px-4 py-2 bg-emerald-600 text-white rounded-xl text-xs font-bold disabled:opacity-50"
-            >
-              Add Trainee
-            </button>
-          </div>
-        </form>
-      </Modal>
+        </Modal>
+      )}
 
       {/* MODAL: Activate Mentor Login */}
       <Modal isOpen={isActivateModalOpen} onClose={() => setIsActivateModalOpen(false)} title={`Activate Login: ${targetMentor?.name}`}>
