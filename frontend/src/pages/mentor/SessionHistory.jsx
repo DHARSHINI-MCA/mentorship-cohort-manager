@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Link, useSearchParams } from 'react-router-dom';
+import { useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { CalendarDays, Clock3, MapPin, Video, Users, ChevronDown } from 'lucide-react';
 import api from '../../api/client';
@@ -34,7 +34,7 @@ function formatDateShort(value) {
 }
 
 export default function SessionHistory() {
-  const [params] = useSearchParams();
+  const [params, setParams] = useSearchParams();
   const cohortId = params.get('cohortId');
   const { data: cohorts = [] } = useQuery({
     queryKey: ['mentorCohorts'], queryFn: async () => (await api.get('/mentor/cohorts')).data || [],
@@ -102,8 +102,6 @@ export default function SessionHistory() {
   const scheduledCount = sessions.filter((session) => session.status === 'scheduled').length;
   const completedCount = sessions.filter((session) => session.status === 'completed').length;
 
-  if (!cohortId) return <main className="mx-auto max-w-6xl px-4 py-8"><p className="text-sm text-slate-600">Choose a cohort before opening its session history.</p><Link to="/mentor/dashboard" className="mt-3 inline-flex text-sm font-semibold text-emerald-700">Back to My Cohorts →</Link></main>;
-
   return (
     <main className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
 
@@ -111,6 +109,24 @@ export default function SessionHistory() {
       <div className="flex items-center justify-between py-2 border-b border-slate-200 mb-0">
         <div><span className="text-xs font-bold uppercase tracking-wider text-slate-500">Session History</span>{selectedCohort && <p className="mt-0.5 text-xs text-slate-400">{selectedCohort.name}</p>}</div>
         <p className="text-[11px] text-slate-400">Review scheduled and completed sessions across your batches.</p>
+      </div>
+
+      <div className="flex flex-wrap items-center justify-between gap-3 border-b border-slate-100 py-2.5">
+        <label htmlFor="session-history-cohort" className="text-[11px] font-semibold uppercase tracking-wider text-slate-500">Cohort</label>
+        <select
+          id="session-history-cohort"
+          value={cohortId || 'all'}
+          onChange={(event) => {
+            const next = new URLSearchParams(params);
+            if (event.target.value === 'all') next.delete('cohortId');
+            else next.set('cohortId', event.target.value);
+            setParams(next);
+          }}
+          className="min-w-64 rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm text-slate-700 outline-none focus:border-emerald-500 focus:ring-2 focus:ring-emerald-100"
+        >
+          <option value="all">All my cohorts</option>
+          {cohorts.filter((cohort) => cohort.accessActive !== false).map((cohort) => <option key={cohort.id} value={cohort.id}>{cohort.name}</option>)}
+        </select>
       </div>
 
       {/* ── Stats strip ── */}

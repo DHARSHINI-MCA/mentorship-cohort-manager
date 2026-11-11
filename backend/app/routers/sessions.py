@@ -165,13 +165,50 @@ async def list_sessions(
     Mentors see only their sessions
     """
     try:
-        if current_user.get("role") == "mentor" and not cohort_id:
-            raise HTTPException(status_code=400, detail="Select a cohort to view sessions", headers={"code": "COHORT_REQUIRED"})
         query = {}
         
         # Role-based filtering
         if current_user.get("role") == "mentor":
             query["mentorId"] = ObjectId(current_user["id"])
+
+            # With no cohort selected, include sessions from every cohort this
+            # mentor can currently access. This supports the Session History
+            # "All my cohorts" view without exposing other mentors' sessions.
+            if not cohort_id:
+                profiles = await db.mentors.find({"userId": current_user["id"]}).to_list(length=None)
+                accessible_cohort_ids = set()
+                for profile in profiles:
+                    profile_cohort_ids = profile.get("cohortIds") or (
+                        [str(profile["cohortId"])] if profile.get("cohortId") else []
+                    )
+                    cohort_access = profile.get("cohortAccess") or {}
+                    accessible_cohort_ids.update(
+                        str(cid) for cid in profile_cohort_ids
+                        if cid and cohort_access.get(str(cid), True) is not False
+                    )
+
+                cohort_refs = []
+                for cohort_ref in accessible_cohort_ids:
+                    cohort_refs.append(cohort_ref)
+                    try:
+                        cohort_refs.append(ObjectId(cohort_ref))
+                    except Exception:
+                        pass
+
+                mentor_refs = [ObjectId(current_user["id"]), current_user["id"]]
+                accessible_batches = await db.batches.find(
+                    {"cohortId": {"$in": cohort_refs}, "mentorId": {"$in": mentor_refs}},
+                    {"_id": 1},
+                ).to_list(length=None) if cohort_refs else []
+                accessible_batch_ids = [batch["_id"] for batch in accessible_batches]
+                if batch_id:
+                    try:
+                        requested_batch_id = ObjectId(batch_id)
+                    except Exception:
+                        requested_batch_id = None
+                    query["batchId"] = requested_batch_id if requested_batch_id in accessible_batch_ids else {"$in": []}
+                else:
+                    query["batchId"] = {"$in": accessible_batch_ids}
         
         # Cohort filter
         if cohort_id:
