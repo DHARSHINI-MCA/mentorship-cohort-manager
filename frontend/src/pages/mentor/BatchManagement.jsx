@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../../api/client';
 import { useToast } from '../../context/ToastContext';
@@ -19,10 +20,12 @@ const pickerColumns = [
 ];
 
 export default function BatchManagement() {
+  const [searchParams, setSearchParams] = useSearchParams();
+  const requestedCohortId = searchParams.get('cohortId') || '';
   const { showToast } = useToast();
   const queryClient = useQueryClient();
 
-  const [cohortId, setCohortId] = useState('');
+  const [cohortId, setCohortId] = useState(requestedCohortId);
   const [showCreateModal, setShowCreateModal] = useState(false);
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [selectedBatch, setSelectedBatch] = useState(null);
@@ -52,11 +55,12 @@ export default function BatchManagement() {
     isLoading: traineesLoading,
     isError: traineesError,
   } = useQuery({
-    queryKey: ['mentorAssignedTraineesForBatches'],
+    queryKey: ['mentorAssignedTraineesForBatches', cohortId],
     queryFn: async () => {
-      const res = await api.get('/mentor/trainees');
+      const res = await api.get('/mentor/trainees', { params: cohortId ? { cohort_id: cohortId } : {} });
       return res.data || [];
     },
+    enabled: !!cohortId,
   });
 
   const { data: batchSessions = [], isLoading: sessionsLoading } = useQuery({
@@ -115,12 +119,14 @@ export default function BatchManagement() {
   });
 
   useEffect(() => {
-    if (availableCohorts.length === 1) {
+    if (requestedCohortId && availableCohorts.some((cohort) => cohort.id === requestedCohortId)) {
+      setCohortId(requestedCohortId);
+    } else if (availableCohorts.length === 1) {
       setCohortId(availableCohorts[0].id);
     } else if (cohortId && !availableCohorts.some((cohort) => cohort.id === cohortId)) {
       setCohortId('');
     }
-  }, [availableCohorts, cohortId]);
+  }, [availableCohorts, cohortId, requestedCohortId]);
 
   const cohortTrainees = assignedTrainees.filter(
     (trainee) => String(trainee.cohortId) === String(cohortId) && trainee.status !== 'dropped_out'
@@ -359,6 +365,7 @@ export default function BatchManagement() {
               value={cohortId}
               onChange={(e) => {
                 setCohortId(e.target.value);
+                setSearchParams(e.target.value ? { cohortId: e.target.value } : {});
                 setSelectedTraineeIds([]);
                 setTraineeSearch('');
                 setTraineeLocationFilter('');

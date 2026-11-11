@@ -2,7 +2,7 @@ from fastapi import APIRouter, Depends, Query, HTTPException, status
 from bson import ObjectId
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from app.core.db import get_database
-from app.core.deps import require_admin, require_any_authenticated
+from app.core.deps import require_admin, require_any_authenticated, ensure_mentor_cohort_access
 from app.services.cohort_service import CohortService
 from app.schemas.cohorts import (
     CohortCreate, CohortUpdate, CohortStatusUpdate, CohortConfigureRequest,
@@ -27,7 +27,12 @@ async def list_cohorts(
     db: AsyncIOMotorDatabase = Depends(get_database),
     current_user: dict = Depends(require_any_authenticated)
 ):
-    return await CohortService.get_cohorts(db, page, limit)
+    allowed_cohort_ids = None
+    if current_user.get("role") == "mentor":
+        profile = await db.mentors.find_one({"userId": current_user["id"]})
+        allowed_cohort_ids = [str(value) for value in ((profile or {}).get("cohortIds") or ([profile.get("cohortId")] if profile and profile.get("cohortId") else []))]
+        allowed_cohort_ids = [cid for cid in allowed_cohort_ids if (profile.get("cohortAccess") or {}).get(cid, True)]
+    return await CohortService.get_cohorts(db, page, limit, allowed_cohort_ids)
 
 @router.get("/{cohort_id}", response_model=CohortResponse)
 async def get_cohort(
@@ -35,6 +40,7 @@ async def get_cohort(
     db: AsyncIOMotorDatabase = Depends(get_database),
     current_user: dict = Depends(require_any_authenticated)
 ):
+    await ensure_mentor_cohort_access(db, current_user, cohort_id)
     return await CohortService.get_cohort_by_id(db, cohort_id)
 
 @router.put("/{cohort_id}", response_model=CohortResponse)
@@ -79,6 +85,7 @@ async def get_cohort_plan(
     db: AsyncIOMotorDatabase = Depends(get_database),
     current_user: dict = Depends(require_any_authenticated)
 ):
+    await ensure_mentor_cohort_access(db, current_user, cohort_id)
     cohort = await CohortService.get_cohort_by_id(db, cohort_id)
     if not cohort.get("trainingPlanId"):
         raise HTTPException(
@@ -108,6 +115,7 @@ async def get_cohort_feedback_form(
     db: AsyncIOMotorDatabase = Depends(get_database),
     current_user: dict = Depends(require_any_authenticated)
 ):
+    await ensure_mentor_cohort_access(db, current_user, cohort_id)
     cohort = await CohortService.get_cohort_by_id(db, cohort_id)
     if not cohort.get("feedbackFormId"):
         raise HTTPException(

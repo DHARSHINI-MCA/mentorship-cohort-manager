@@ -23,6 +23,12 @@ async def init_indexes():
         return
     # Users email unique index
     await db.users.create_index([("email", pymongo.ASCENDING)], unique=True)
+
+    # Cross-role identity claims enforce one email and employee ID per person.
+    await db.personIdentityClaims.create_index([("claim", pymongo.ASCENDING)], unique=True)
+    await db.personIdentityClaims.create_index([("ownerType", pymongo.ASCENDING), ("ownerId", pymongo.ASCENDING)])
+    from app.services.identity_service import backfill_existing_person_identity_claims
+    await backfill_existing_person_identity_claims(db)
     
     # Users temporary password index for first login reset
     await db.users.create_index([("temporaryPassword", pymongo.ASCENDING)])
@@ -51,6 +57,8 @@ async def init_indexes():
     
     # Mentors and trainees indexes for location/timezone filtering
     await db.mentors.create_index([("cohortId", pymongo.ASCENDING), ("email", pymongo.ASCENDING)])
+    await db.mentors.create_index([("cohortIds", pymongo.ASCENDING)])
+    await db.mentors.create_index([("userId", pymongo.ASCENDING)])
     await db.trainees.create_index([("cohortId", pymongo.ASCENDING), ("email", pymongo.ASCENDING)])
     await db.mentors.create_index([("cohortId", pymongo.ASCENDING), ("location", pymongo.ASCENDING)])
     await db.mentors.create_index([("cohortId", pymongo.ASCENDING), ("timezone", pymongo.ASCENDING)])

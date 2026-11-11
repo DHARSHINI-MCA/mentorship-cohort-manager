@@ -1,8 +1,9 @@
 from typing import Optional
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, Query, HTTPException
+from bson import ObjectId
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from app.core.db import get_database
-from app.core.deps import require_admin, require_nominator, require_any_authenticated
+from app.core.deps import require_admin, require_nominator, require_any_authenticated, ensure_mentor_cohort_access
 from app.services.nomination_service import NominationService
 from app.schemas.nominees import (
     MentorNomineeCreate, MentorNomineeResponse, MyNomineeResponse,
@@ -141,6 +142,7 @@ async def list_mentors(
     db: AsyncIOMotorDatabase = Depends(get_database),
     current_user: dict = Depends(require_any_authenticated)
 ):
+    await ensure_mentor_cohort_access(db, current_user, cohort_id)
     return await NominationService.get_cohort_mentors(db, cohort_id, current_user, page, limit)
 
 
@@ -152,6 +154,7 @@ async def list_trainees(
     db: AsyncIOMotorDatabase = Depends(get_database),
     current_user: dict = Depends(require_any_authenticated)
 ):
+    await ensure_mentor_cohort_access(db, current_user, cohort_id)
     return await NominationService.get_cohort_trainees(db, cohort_id, current_user, page, limit)
 
 
@@ -162,6 +165,15 @@ async def get_mentor_assigned_trainees(
     db: AsyncIOMotorDatabase = Depends(get_database),
     current_user: dict = Depends(require_any_authenticated)
 ):
+    await ensure_mentor_cohort_access(db, current_user, cohort_id)
+    if current_user.get("role") == "mentor":
+        try:
+            mentor_object_id = ObjectId(mentor_id)
+        except Exception:
+            raise HTTPException(status_code=404, detail="Mentor not found")
+        own_profile = await db.mentors.find_one({"userId": current_user["id"], "_id": mentor_object_id})
+        if not own_profile:
+            raise HTTPException(status_code=403, detail="You can only view trainees assigned to you")
     return await NominationService.get_mentor_trainees_in_cohort(db, cohort_id, mentor_id)
 
 
@@ -212,6 +224,18 @@ async def toggle_mentor_global_status(
     """Admin globally activates or deactivates a mentor account."""
     is_active = payload.get("isActive", True)
     return await NominationService.toggle_mentor_status(db, mentor_id, is_active)
+
+
+@router.put("/nominations/mentors/{mentor_id}/cohort-access")
+async def toggle_mentor_cohort_access(
+    mentor_id: str,
+    payload: dict,
+    db: AsyncIOMotorDatabase = Depends(get_database),
+    current_user: dict = Depends(require_admin),
+):
+    return await NominationService.toggle_mentor_cohort_access(
+        db, mentor_id, str(payload.get("cohortId", "")), bool(payload.get("isActive", True))
+    )
 
 
 @router.get("/nominations/by-nominator/{nominator_id}")

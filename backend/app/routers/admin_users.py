@@ -9,6 +9,7 @@ from app.core.db import get_database
 from app.core.security import get_password_hash, generate_temporary_password
 from app.core.deps import require_admin
 from app.schemas.users import UserCreateWithTempPassword, UserResponse
+from app.services.identity_service import claim_person_identity, release_person_identity
 
 router = APIRouter(prefix="/admin/users", tags=["Admin - Users"])
 
@@ -35,14 +36,14 @@ async def create_user_with_temp_password(
             headers={"code": "INVALID_ROLE"}
         )
 
-    # Check if user already exists
-    existing_user = await db.users.find_one({"email": user_data.email.lower()})
-    if existing_user:
-        raise HTTPException(
-            status_code=status.HTTP_409_CONFLICT,
-            detail="Email already exists",
-            headers={"code": "EMAIL_EXISTS"}
-        )
+    user_id_obj = ObjectId()
+    await claim_person_identity(
+        db,
+        owner_type=user_data.role,
+        owner_id=str(user_id_obj),
+        email=str(user_data.email),
+        employee_id=user_data.employeeId,
+    )
 
     # Generate temporary password
     temp_password = generate_temporary_password()
@@ -51,6 +52,7 @@ async def create_user_with_temp_password(
     user_doc = {
         "name": user_data.name,
         "email": user_data.email.lower(),
+        "employeeId": user_data.employeeId.strip(),
         "role": user_data.role,
         "passwordHash": get_password_hash(temp_password),
         "firstLoginPasswordReset": True,  # Flag to force password reset on first login
@@ -62,8 +64,13 @@ async def create_user_with_temp_password(
     }
 
     # Insert user
-    result = await db.users.insert_one(user_doc)
-    user_id = str(result.inserted_id)
+    user_doc["_id"] = user_id_obj
+    try:
+        await db.users.insert_one(user_doc)
+    except Exception:
+        await release_person_identity(db, str(user_id_obj))
+        raise
+    user_id = str(user_id_obj)
 
     return {
         "success": True,
@@ -149,6 +156,8 @@ async def deactivate_user(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="User not found"
             )
+        if await db.mentors.find_one({"userId": user_id}):
+            await db.mentors.update_many({"userId": user_id}, {"$set": {"isActive": False}})
         
         return {
             "success": True,
@@ -177,6 +186,8 @@ async def activate_user(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="User not found"
             )
+        if await db.mentors.find_one({"userId": user_id}):
+            await db.mentors.update_many({"userId": user_id}, {"$set": {"isActive": True}})
         
         return {
             "success": True,

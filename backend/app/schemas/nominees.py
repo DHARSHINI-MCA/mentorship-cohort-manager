@@ -1,4 +1,4 @@
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, Field
 from typing import Optional, List
 from datetime import datetime
 
@@ -18,7 +18,7 @@ class MentorNomineeCreate(BaseModel):
     name: str
     email: EmailStr
     department: Optional[str] = ""
-    employeeId: Optional[str] = ""
+    employeeId: str = Field(min_length=1, max_length=64)
     location: Optional[str] = None
     timezone: Optional[str] = None
     experience: Optional[str] = None
@@ -49,6 +49,7 @@ class MentorNomineeResponse(BaseModel):
     userId: Optional[str] = None
     isLoginActive: bool = False
     isAccountActive: bool = True
+    isCohortAccessActive: bool = True
     isActive: bool = True
     status: Optional[str] = "pending"
     assignedTraineesCount: Optional[int] = 0

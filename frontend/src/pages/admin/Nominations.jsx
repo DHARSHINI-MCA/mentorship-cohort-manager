@@ -1,6 +1,6 @@
 import React, { useEffect, useState } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { Award, Copy, FolderPlus, KeyRound, Search, UserCheck, UserPlus, Users } from 'lucide-react';
+import { Award, Copy, KeyRound, Search, UserCheck, UserPlus, Users, Pencil } from 'lucide-react';
 import api from '../../api/client';
 import { useToast } from '../../context/ToastContext';
 import { Badge } from '../../components/Badge';
@@ -27,20 +27,21 @@ export function Nominations() {
 
   // ---- nominee tables ----
   const [search, setSearch] = useState('');
-  const [allocation, setAllocation] = useState('unallocated');
+  const [allocation, setAllocation] = useState('all');
   const [nominatorFilter, setNominatorFilter] = useState('');
   const [page, setPage] = useState(1);
   const [limit, setLimit] = useState(10);
-  const [selectedIds, setSelectedIds] = useState([]);
-  const [isAllocateOpen, setIsAllocateOpen] = useState(false);
-  const [targetCohortId, setTargetCohortId] = useState('');
+  const [editingNominee, setEditingNominee] = useState(null);
+  const [selectedCohortIds, setSelectedCohortIds] = useState([]);
+  const [selectedNominatorId, setSelectedNominatorId] = useState(null);
+  const [detailsTab, setDetailsTab] = useState('mentors');
   const [isAddOpen, setIsAddOpen] = useState(false);
   const debouncedSearch = useDebouncedValue(search);
 
   useEffect(() => {
     setSearch('');
     setPage(1);
-    setSelectedIds([]);
+    setEditingNominee(null);
   }, [activeTab]);
   useEffect(() => setPage(1), [debouncedSearch, allocation, nominatorFilter, limit]);
 
@@ -70,26 +71,43 @@ export function Nominations() {
   const { data: cohortsData } = useQuery({
     queryKey: ['cohorts', 'forAllocation'],
     queryFn: async () => (await api.get('/cohorts?limit=100')).data,
-    enabled: isAllocateOpen,
+    enabled: !!editingNominee,
   });
-  const openCohorts = (cohortsData?.items || []).filter((cohort) => cohort.status !== 'closed');
+  const openCohorts = (cohortsData?.items || []).filter((cohort) => cohort.status !== 'closed'
+    || (editingNominee?.cohortIds || (editingNominee?.cohortId ? [editingNominee.cohortId] : [])).includes(cohort.id));
 
-  const allocateMutation = useMutation({
-    mutationFn: async () =>
-      (await api.post(`/cohorts/${targetCohortId}/${kind}s/allocate`, { ids: selectedIds })).data,
-    onSuccess: (result) => {
-      const cohortName = openCohorts.find((cohort) => cohort.id === targetCohortId)?.name || 'the cohort';
+  const saveCohortMutation = useMutation({
+    mutationFn: async () => {
+      if (kind === 'mentor') {
+        return (await api.put(`/nominations/mentors/${editingNominee.id}/cohorts`, { cohortIds: selectedCohortIds })).data;
+      }
+      return (await api.put(`/nominations/trainees/${editingNominee.id}/cohort`, { cohortId: selectedCohortIds[0] || null })).data;
+    },
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['adminNominees'] });
       queryClient.invalidateQueries({ queryKey: ['nomineePool'] });
       queryClient.invalidateQueries({ queryKey: ['cohorts'] });
       queryClient.invalidateQueries({ queryKey: ['adminNominators'] });
-      showToast(`${result.allocated} ${kind}${result.allocated === 1 ? '' : 's'} added to ${cohortName}`);
-      if (result.skipped?.length) showToast(`${result.skipped.length} skipped (already in a cohort)`, 'warning');
-      setSelectedIds([]);
-      setIsAllocateOpen(false);
-      setTargetCohortId('');
+      showToast(`${kind === 'mentor' ? 'Mentor cohorts' : 'Trainee cohort'} updated`);
+      setEditingNominee(null);
     },
-    onError: (err) => showToast(err.response?.data?.detail || 'Failed to add to cohort', 'error'),
+    onError: (err) => showToast(err.response?.data?.detail || 'Failed to update cohort assignment', 'error'),
+  });
+
+  const toggleMentorMutation = useMutation({
+    mutationFn: async ({ id, isActive }) => api.put(`/nominations/mentors/${id}/status`, { isActive }),
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: ['adminNominees'] });
+      queryClient.invalidateQueries({ queryKey: ['cohorts'] });
+      showToast('Mentor account status updated');
+    },
+    onError: (err) => showToast(err.response?.data?.detail || 'Could not update mentor account', 'error'),
+  });
+
+  const { data: nominatorDetails, isLoading: detailsLoading } = useQuery({
+    queryKey: ['nominatorSubmissions', selectedNominatorId],
+    queryFn: async () => (await api.get(`/nominations/by-nominator/${selectedNominatorId}`)).data,
+    enabled: !!selectedNominatorId,
   });
 
   const addNomineeMutation = useMutation({
@@ -102,31 +120,46 @@ export function Nominations() {
     onError: (err) => showToast(err.response?.data?.detail || `Failed to add ${kind}`, 'error'),
   });
 
-  const nomineeColumns = [
-    { key: 'name', header: kind === 'trainee' ? 'Trainee' : 'Mentor', render: (row) => <PersonCell primary={row.name} secondary={row.email} /> },
-    { key: 'employeeId', header: 'Employee ID', render: (row) => <span className="font-mono text-xs bg-slate-100 px-2 py-0.5 rounded">{row.employeeId || '—'}</span> },
+  const openAssignmentEditor = (row) => {
+    setEditingNominee(row);
+    setSelectedCohortIds(kind === 'mentor' ? (row.cohortIds || []) : (row.cohortId ? [row.cohortId] : []));
+  };
+
+  const nomineeColumns = kind === 'mentor' ? [
     {
-      key: 'location',
-      header: 'Location',
-      render: (row) => (
-        <div>
-          <div>{row.location || '—'}</div>
-          {row.timezone && <div className="text-xs text-slate-400">{row.timezone}</div>}
-        </div>
-      ),
+      key: 'mentor', header: 'Mentor', className: 'w-[22%]', headerClassName: 'w-[22%]',
+      render: (row) => <div className="min-w-0 space-y-1"><PersonCell primary={row.name} secondary={row.email} /><span className="inline-flex rounded-md bg-slate-100 px-2 py-0.5 font-mono text-[11px] text-slate-600">{row.employeeId || 'No employee ID'}</span></div>,
     },
-    { key: 'nominatorName', header: 'Nominated by' },
+    {
+      key: 'location', header: 'Location', className: 'w-[15%]', headerClassName: 'w-[15%]',
+      render: (row) => <div className="min-w-0"><div className="truncate font-medium text-slate-700">{row.location || '—'}</div>{row.timezone && <div className="truncate text-xs text-slate-400">{row.timezone}</div>}</div>,
+    },
+    { key: 'nominatorName', header: 'Nominated by', className: 'w-[13%]', headerClassName: 'w-[13%]', render: (row) => <span className="text-sm">{row.nominatorName || 'Platform Administrator'}</span> },
+    { key: 'createdAt', header: 'Date nominated', className: 'w-[11%]', headerClassName: 'w-[11%]', render: (row) => <span className="whitespace-nowrap text-sm text-slate-600">{formatDate(row.createdAt)}</span> },
+    {
+      key: 'cohorts', header: 'Cohort assignments', className: 'w-[23%]', headerClassName: 'w-[23%]',
+      render: (row) => {
+        const names = row.cohortNames?.length ? row.cohortNames : (row.cohortName ? [row.cohortName] : []);
+        if (!names.length) return <Badge variant="draft">Unassigned</Badge>;
+        return <div className="flex min-w-0 items-center gap-1.5" title={names.join(' · ')}><span className="max-w-[calc(100%-3.5rem)] truncate rounded-full border border-emerald-200 bg-emerald-50 px-2.5 py-1 text-xs font-semibold text-emerald-700">{names[0]}</span>{names.length > 1 && <span className="shrink-0 rounded-full bg-slate-100 px-2 py-1 text-[11px] font-semibold text-slate-600">+{names.length - 1}</span>}</div>;
+      },
+    },
+    {
+      key: 'account', header: 'Global account', className: 'w-[9%]', headerClassName: 'w-[9%]',
+      render: (row) => <button type="button" onClick={() => toggleMentorMutation.mutate({ id: row.id, isActive: !row.isActive })} disabled={toggleMentorMutation.isPending} title={`Click to ${row.isActive ? 'deactivate' : 'activate'} globally`} className={`inline-flex items-center gap-2 whitespace-nowrap rounded-full px-3 py-1.5 text-xs font-semibold transition-colors disabled:opacity-50 ${row.isActive ? 'bg-emerald-50 text-emerald-700 hover:bg-rose-50 hover:text-rose-700' : 'bg-rose-50 text-rose-700 hover:bg-emerald-50 hover:text-emerald-700'}`} aria-label={`${row.isActive ? 'Deactivate' : 'Activate'} mentor globally`}><span className={`h-1.5 w-1.5 rounded-full ${row.isActive ? 'bg-emerald-500' : 'bg-rose-500'}`} />{row.isActive ? 'Active' : 'Inactive'}</button>,
+    },
+    {
+      key: 'actions', header: 'Manage', className: 'w-[7%]', headerClassName: 'w-[7%]',
+      render: (row) => <button type="button" onClick={() => openAssignmentEditor(row)} className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-lg px-2.5 py-2 text-xs font-bold text-indigo-700 hover:bg-indigo-50"><Pencil className="h-3.5 w-3.5" />Edit</button>,
+    },
+  ] : [
+    { key: 'name', header: 'Trainee', render: (row) => <PersonCell primary={row.name} secondary={row.email} /> },
+    { key: 'employeeId', header: 'Employee ID', render: (row) => <span className="rounded bg-slate-100 px-2 py-0.5 font-mono text-xs">{row.employeeId || '—'}</span> },
+    { key: 'location', header: 'Location', render: (row) => <div><div>{row.location || '—'}</div>{row.timezone && <div className="text-xs text-slate-400">{row.timezone}</div>}</div> },
+    { key: 'nominatorName', header: 'Nominated by', render: (row) => <span>{row.nominatorName || 'Platform Administrator'}</span> },
     { key: 'createdAt', header: 'Nominated on', render: (row) => formatDate(row.createdAt) },
-    {
-      key: 'allocationStatus',
-      header: 'Cohort',
-      render: (row) =>
-        row.cohortId ? (
-          <Badge variant="active">{row.cohortName || 'In a cohort'}</Badge>
-        ) : (
-          <Badge variant="draft">Not in a cohort</Badge>
-        ),
-    },
+    { key: 'allocationStatus', header: 'Cohort', render: (row) => row.cohortId ? <div className="flex max-w-sm flex-wrap gap-1">{(row.cohortNames?.length ? row.cohortNames : [row.cohortName]).filter(Boolean).map((name) => <Badge key={name} variant="active">{name}</Badge>)}</div> : <Badge variant="draft">Not in a cohort</Badge> },
+    { key: 'actions', header: 'Actions', render: (row) => <button type="button" onClick={() => openAssignmentEditor(row)} className="inline-flex items-center gap-1.5 whitespace-nowrap text-xs font-bold text-indigo-700 hover:text-indigo-900"><Pencil className="h-3.5 w-3.5" />{row.cohortId ? 'Edit cohort' : 'Add to cohort'}</button> },
   ];
 
   // ---- nominator accounts ----
@@ -182,7 +215,7 @@ export function Nominations() {
   });
 
   const nominatorColumns = [
-    { key: 'name', header: 'Nominator', render: (row) => <PersonCell primary={row.name} secondary={row.email} /> },
+    { key: 'name', header: 'Nominator', render: (row) => <button type="button" onClick={() => { setSelectedNominatorId(row.id); setDetailsTab('mentors'); }} className="text-left hover:text-emerald-700"><PersonCell primary={row.name} secondary={row.email} /></button> },
     { key: 'employeeId', header: 'Employee ID', render: (row) => <span className="font-mono text-xs bg-slate-100 px-2 py-0.5 rounded">{row.employeeId || '—'}</span> },
     { key: 'traineesNominated', header: 'Trainees nominated', render: (row) => <span className="font-semibold">{row.traineesNominated}</span> },
     { key: 'mentorsNominated', header: 'Mentors nominated', render: (row) => <span className="font-semibold">{row.mentorsNominated}</span> },
@@ -285,6 +318,7 @@ export function Nominations() {
               className="px-3 py-2 text-xs font-semibold rounded-xl border border-slate-200 bg-white"
             >
               <option value="">All nominators</option>
+              <option value="platform_admin">Platform Administrator</option>
               {nominators.map((nominator) => (
                 <option key={nominator.id} value={nominator.id}>{nominator.name}</option>
               ))}
@@ -295,14 +329,6 @@ export function Nominations() {
               className="inline-flex items-center justify-center gap-1.5 rounded-xl border border-slate-200 bg-white px-3.5 py-2 text-xs font-bold text-slate-700 hover:bg-slate-50"
             >
               <UserPlus className="w-4 h-4 text-emerald-600" /> Add {personLabel}
-            </button>
-            <button
-              type="button"
-              onClick={() => setIsAllocateOpen(true)}
-              disabled={selectedIds.length === 0}
-              className="inline-flex items-center justify-center gap-1.5 rounded-xl bg-emerald-600 px-4 py-2 text-xs font-bold text-white shadow-sm hover:bg-emerald-700 disabled:opacity-50"
-            >
-              <FolderPlus className="w-4 h-4" /> Add {selectedIds.length || ''} to cohort
             </button>
           </div>
 
@@ -315,10 +341,6 @@ export function Nominations() {
                 ? `No ${kind}s match these filters.`
                 : `No ${kind}s have been nominated yet.`
             }
-            selectable
-            selectedIds={selectedIds}
-            onSelectionChange={setSelectedIds}
-            isRowSelectable={(row) => !row.cohortId}
             pagination={{ page, limit, total: nominees?.total || 0, onPageChange: setPage, onLimitChange: setLimit }}
           />
         </div>
@@ -357,33 +379,44 @@ export function Nominations() {
         />
       </Modal>
 
-      {/* Add selected nominees to a cohort */}
-      <Modal isOpen={isAllocateOpen} onClose={() => setIsAllocateOpen(false)} title="Add to Cohort" maxWidth="max-w-lg">
+      {/* Edit one nominee's cohort assignment */}
+      <Modal isOpen={!!editingNominee} onClose={() => setEditingNominee(null)} title={`${kind === 'mentor' ? 'Edit mentor cohorts' : 'Edit trainee cohort'} · ${editingNominee?.name || ''}`} maxWidth="max-w-lg">
         <div className="space-y-4">
-          <p className="text-sm text-slate-600">
-            Add <strong>{selectedIds.length}</strong> selected {kind}{selectedIds.length === 1 ? '' : 's'} to:
-          </p>
-          <select value={targetCohortId} onChange={(event) => setTargetCohortId(event.target.value)} className={inputClass}>
-            <option value="">Select a cohort</option>
-            {openCohorts.map((cohort) => (
-              <option key={cohort.id} value={cohort.id}>{cohort.name} ({cohort.status})</option>
-            ))}
-          </select>
+          <p className="text-sm text-slate-600">{kind === 'mentor' ? 'Select every cohort this mentor should be assigned to. Existing assignments are preselected.' : 'Choose one cohort or clear the assignment.'}</p>
+          <div className="max-h-72 space-y-2 overflow-y-auto rounded-xl border border-slate-200 p-3">
+            {openCohorts.map((cohort) => {
+              const checked = selectedCohortIds.includes(cohort.id);
+              return <label key={cohort.id} className="flex cursor-pointer items-center gap-3 rounded-lg px-2 py-2 hover:bg-slate-50">
+                <input type={kind === 'mentor' ? 'checkbox' : 'radio'} name="nominee-cohort" checked={checked} onChange={() => setSelectedCohortIds(kind === 'mentor' ? (checked ? selectedCohortIds.filter((id) => id !== cohort.id) : [...selectedCohortIds, cohort.id]) : [cohort.id])} className="h-4 w-4 accent-emerald-600" />
+                <span className="text-sm font-medium text-slate-800">{cohort.name}</span><span className="ml-auto text-xs text-slate-400">{cohort.status}</span>
+              </label>;
+            })}
+            {!openCohorts.length && cohortsData && <p className="p-3 text-sm text-slate-500">No open cohorts available.</p>}
+          </div>
+          {kind === 'trainee' && selectedCohortIds.length > 0 && <button type="button" onClick={() => setSelectedCohortIds([])} className="text-xs font-semibold text-rose-700">Remove cohort assignment</button>}
           {openCohorts.length === 0 && cohortsData && (
             <p className="text-xs text-amber-700">No open cohorts. Create a cohort first on the Cohorts page.</p>
           )}
           <div className="flex justify-end gap-2 border-t border-slate-100 pt-4">
-            <button type="button" onClick={() => setIsAllocateOpen(false)} className="rounded-xl px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100">Cancel</button>
+            <button type="button" onClick={() => setEditingNominee(null)} className="rounded-xl px-4 py-2 text-xs font-bold text-slate-600 hover:bg-slate-100">Cancel</button>
             <button
               type="button"
-              onClick={() => allocateMutation.mutate()}
-              disabled={!targetCohortId || allocateMutation.isPending}
+              onClick={() => saveCohortMutation.mutate()}
+              disabled={saveCohortMutation.isPending}
               className="rounded-xl bg-emerald-600 px-5 py-2.5 text-xs font-bold text-white hover:bg-emerald-700 disabled:opacity-50"
             >
-              {allocateMutation.isPending ? 'Adding…' : 'Add to cohort'}
+              {saveCohortMutation.isPending ? 'Saving…' : 'Save assignment'}
             </button>
           </div>
         </div>
+      </Modal>
+
+      <Modal isOpen={!!selectedNominatorId} onClose={() => setSelectedNominatorId(null)} title={`Nominator details · ${nominatorDetails?.nominator?.name || ''}`} maxWidth="max-w-5xl">
+        {detailsLoading ? <p className="py-10 text-center text-sm text-slate-500">Loading nominations…</p> : <div className="space-y-4">
+          <div className="grid gap-3 rounded-xl bg-slate-50 p-4 text-sm sm:grid-cols-3"><div><span className="text-slate-500">Employee ID</span><p className="font-semibold">{nominatorDetails?.nominator?.employeeId || '—'}</p></div><div><span className="text-slate-500">Email</span><p className="font-semibold">{nominatorDetails?.nominator?.email || '—'}</p></div><div><span className="text-slate-500">Account</span><p className={`font-semibold ${nominatorDetails?.nominator?.isActive ? 'text-emerald-700' : 'text-rose-700'}`}>{nominatorDetails?.nominator?.isActive ? 'Active' : 'Inactive'}</p></div></div>
+          <div className="flex gap-4 border-b border-slate-200">{['mentors','trainees'].map((tab) => <button key={tab} onClick={() => setDetailsTab(tab)} className={`pb-2 text-sm font-semibold capitalize ${detailsTab === tab ? 'border-b-2 border-emerald-600 text-emerald-700' : 'text-slate-500'}`}>{tab} ({nominatorDetails?.[tab]?.length || 0})</button>)}</div>
+          {(nominatorDetails?.[detailsTab] || []).length ? <div className="overflow-x-auto"><table className="w-full text-left text-sm"><thead className="bg-slate-50 text-[11px] uppercase text-slate-500"><tr><th className="p-3">Name / email</th><th className="p-3">Employee ID</th><th className="p-3">Location</th><th className="p-3">Nominated</th><th className="p-3">Assignment status</th><th className="p-3">Cohort(s)</th></tr></thead><tbody className="divide-y divide-slate-100">{nominatorDetails[detailsTab].map((person) => <tr key={person.id}><td className="p-3 font-medium">{person.name}<div className="text-xs text-slate-500">{person.email}</div></td><td className="p-3">{person.employeeId || '—'}</td><td className="p-3">{person.location || '—'}</td><td className="p-3">{formatDate(person.createdAt)}</td><td className="p-3">{detailsTab === 'mentors' ? (person.assignedCohorts?.length ? 'Assigned' : 'Not assigned') : (person.cohortName ? 'Assigned' : 'Not assigned')}</td><td className="p-3">{detailsTab === 'mentors' ? (person.assignedCohorts?.join(', ') || '—') : (person.cohortName || '—')}</td></tr>)}</tbody></table></div> : <p className="rounded-xl border border-dashed border-slate-300 p-10 text-center text-sm text-slate-500">This nominator has not nominated any mentors or trainees yet.</p>}
+        </div>}
       </Modal>
 
       {/* Create nominator */}

@@ -8,6 +8,7 @@ This document describes the application data model from the backend source. Mong
 - Documents use MongoDB `_id` values, generally `ObjectId`.
 - Some references are represented as strings and some as `ObjectId` values for compatibility with existing API paths.
 - Passwords are stored as bcrypt hashes. Attendance is embedded in session documents.
+- Mentor, trainee, and nominator email addresses and employee IDs are reserved globally through `personIdentityClaims`. Values are trimmed and compared case-insensitively. A mentor profile and its linked login account represent the same person and do not conflict.
 
 ## Collections
 
@@ -19,16 +20,31 @@ Login identities for administrators, mentors, and nominators.
 {
   _id: ObjectId,
   name: String,
-  email: String,                   // unique
+  email: String,                   // unique among accounts; person claim is global
   passwordHash: String,
   role: "admin" | "mentor" | "nominator",
   isActive: Boolean,
-  employeeId: String?,
+  employeeId: String?,             // unique person claim when present
   firstLoginPasswordReset: Boolean?,
   temporaryPassword: String?,      // transitional setup field
   createdAt: Date?, updatedAt: Date?, lastLoginAt: Date?
 }
 ```
+
+### `personIdentityClaims`
+
+One document per normalized email or employee ID. The unique `claim` index prevents simultaneous creation of the same identity in different person collections.
+
+```js
+{
+  _id: ObjectId,
+  claim: "email:person@example.com" | "employeeId:emp-123", // unique, normalized
+  ownerType: "mentor" | "trainee" | "nominator" | "user",
+  ownerId: String
+}
+```
+
+Existing identities are backfilled at application startup and checked again before person creation. Existing duplicate records are preserved; their first claim prevents adding another duplicate.
 
 ### `cohorts`
 
@@ -53,12 +69,17 @@ Login identities for administrators, mentors, and nominators.
 ```js
 {
   _id: ObjectId,
-  cohortId: String | null,   // null = nominated but not yet added to a cohort
+  cohortId: String | null,   // legacy/primary cohort reference kept for compatibility
+  cohortIds: [String],       // all cohort memberships; empty = not assigned
+  cohortAccess: { [cohortId: string]: Boolean }, // per-cohort access; missing means enabled
+  cohortAssignmentHistory: [{ action: String?, fromCohortId: String?, toCohortId: String?, cohortId: String?, cohortIds: [String]?, at: Date }],
+  cohortAccessHistory: [{ cohortId: String, isActive: Boolean, at: Date }],
+  isActive: Boolean,         // global account status, separate from cohortAccess
   nominatedBy: String?,
   userId: String?,                 // linked login in users
   name: String,
   email: String,
-  employeeId: String?,
+  employeeId: String,              // globally unique person claim
   department: String?,
   location: String?,
   timezone: String?,
@@ -75,11 +96,12 @@ Login identities for administrators, mentors, and nominators.
 {
   _id: ObjectId,
   cohortId: String | null,   // null = nominated but not yet added to a cohort
+  cohortAssignmentHistory: [{ fromCohortId: String?, toCohortId: String?, at: Date }],
   nominatedBy: String?,
   mentorId: ObjectId | String?,   // assigned mentor profile
   name: String,
   email: String,
-  employeeId: String?,
+  employeeId: String,              // globally unique person claim
   department: String?,
   location: String?,
   timezone: String?,
@@ -276,7 +298,9 @@ Attendance is editable after it has been submitted. A session can hold multiple 
 
 - `users` → `mentors`: optional account/profile link through `mentors.userId`.
 - `users` (role `nominator`) → `mentors` / `trainees`: a nominator owns the people they nominated through `nominatedBy`. Nominators are not linked to cohorts.
-- `mentors` / `trainees`: `cohortId` is `null` while a nominee is only in the nomination pool. An admin adds the nominee to a cohort, which sets `cohortId`.
+- `mentors`: one mentor profile/login can belong to many cohorts through `cohortIds`; `cohortId` remains as a compatibility reference. Additional memberships never create another mentor profile or login.
+- `trainees`: `cohortId` is `null` while a nominee is only in the nomination pool. A trainee belongs to at most one cohort at a time; reassignment history is retained in `cohortAssignmentHistory`.
+- Mentor `isActive` is the global account switch. `cohortAccess[cohortId]` is the independent per-cohort access switch; global deactivation denies access everywhere.
 - `cohorts` → `mentors`, `trainees`, `batches`, and cohort-specific training/feedback copies.
 - `mentors` → `trainees`: trainee assignment through `trainees.mentorId`.
 - `trainees` → `progress`: one progress document per trainee.
@@ -285,6 +309,6 @@ Attendance is editable after it has been submitted. A session can hold multiple 
 - `batches` → `sessions`: session documents reference `batches._id`.
 - `sessions` → attendance: embedded in `sessions.attendance[]`.
 
-Indexes initialized by the backend include unique `users.email`, unique `progress.traineeId`, unique `feedbackResponses.(traineeId, weekNumber)`, batch lookup indexes, mentor/trainee cohort-location-timezone indexes, and session batch/date indexes.
+Indexes initialized by the backend include unique `users.email`, unique `personIdentityClaims.claim`, unique `progress.traineeId`, unique `feedbackResponses.(traineeId, weekNumber)`, mentor lookup indexes by `userId` and `cohortIds`, batch lookup indexes, mentor/trainee cohort-location-timezone indexes, and session batch/date indexes.
 
 See [DATABASE_SCHEMA_DIAGRAM.md](DATABASE_SCHEMA_DIAGRAM.md) for the entity relationship diagram.

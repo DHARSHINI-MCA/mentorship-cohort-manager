@@ -14,6 +14,13 @@ erDiagram
         boolean firstLoginPasswordReset
     }
 
+    PERSON_IDENTITY_CLAIMS {
+        ObjectId _id PK
+        string claim UK "normalized email or employeeId"
+        string ownerType
+        string ownerId
+    }
+
     COHORTS {
         ObjectId _id PK
         string name
@@ -28,12 +35,17 @@ erDiagram
 
     MENTORS {
         ObjectId _id PK
-        ObjectId_string cohortId FK
+        ObjectId_string cohortId FK "legacy primary reference"
+        string_array cohortIds FK "all memberships"
+        object cohortAccess "cohortId to enabled"
+        array cohortAssignmentHistory
+        array cohortAccessHistory
+        boolean isActive "global account status"
         string userId FK
         string nominatedBy FK
         string name
         string email
-        string employeeId
+        string employeeId "globally unique person claim"
         string department
         string location
         string timezone
@@ -43,11 +55,12 @@ erDiagram
     TRAINEES {
         ObjectId _id PK
         ObjectId_string cohortId FK
+        array cohortAssignmentHistory
         ObjectId_string mentorId FK
         string nominatedBy FK
         string name
         string email
-        string employeeId
+        string employeeId "globally unique person claim"
         string department
         string location
         string timezone
@@ -144,8 +157,11 @@ erDiagram
     }
 
     USERS ||--o| MENTORS : "mentor login profile"
+    PERSON_IDENTITY_CLAIMS }o--|| USERS : "nominator/user identity claim"
+    PERSON_IDENTITY_CLAIMS }o--|| MENTORS : "mentor identity claim"
+    PERSON_IDENTITY_CLAIMS }o--|| TRAINEES : "trainee identity claim"
     USERS }o--o{ COHORTS : "nominatorIds access"
-    COHORTS ||--o{ MENTORS : includes
+    COHORTS }o--o{ MENTORS : "many-to-many cohortIds"
     COHORTS ||--o{ TRAINEES : includes
     MENTORS ||--o{ TRAINEES : "assigned mentor"
     COHORTS ||--o{ COHORT_TRAINING_PLANS : configures

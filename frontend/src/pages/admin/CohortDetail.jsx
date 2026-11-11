@@ -55,6 +55,7 @@ export function CohortDetail() {
   const [isActivateModalOpen, setIsActivateModalOpen] = useState(false);
   const [selectedMentorDetails, setSelectedMentorDetails] = useState(null);
   const [targetMentor, setTargetMentor] = useState(null);
+  const [selectedNominatorDetails, setSelectedNominatorDetails] = useState(null);
 
   // Edit Cohort & Timeline States
   const [isEditTimelineOpen, setIsEditTimelineOpen] = useState(false);
@@ -140,6 +141,24 @@ export function CohortDetail() {
       const res = await api.get(`/cohorts/${cohortId}`);
       return res.data;
     },
+  });
+
+  const { data: cohortNominators = [], isLoading: cohortNominatorsLoading } = useQuery({
+    queryKey: ['adminNominators'],
+    queryFn: async () => {
+      const res = await api.get('/users/nominators');
+      return res.data || [];
+    },
+    enabled: activeTab === 'nominations',
+  });
+
+  const { data: nominatorSubmissions, isLoading: nominatorSubmissionsLoading } = useQuery({
+    queryKey: ['nominatorSubmissions', selectedNominatorDetails?.id],
+    queryFn: async () => {
+      const res = await api.get(`/nominations/by-nominator/${selectedNominatorDetails.id}`);
+      return res.data;
+    },
+    enabled: activeTab === 'nominations' && !!selectedNominatorDetails?.id,
   });
 
   // 2. Fetch Mentors
@@ -380,16 +399,29 @@ export function CohortDetail() {
   });
 
   const toggleAccountMutation = useMutation({
+    mutationFn: async ({ mentorId, isActive }) => {
+      const response = await api.put(`/nominations/mentors/${mentorId}/cohort-access`, { cohortId, isActive });
+      return response.data;
+    },
+    onSuccess: (_result, variables) => {
+      queryClient.invalidateQueries({ queryKey: ['cohortMentors', cohortId] });
+      showToast(`Mentor cohort access ${variables.isActive ? 'activated' : 'deactivated'}`);
+    },
+    onError: (err) => showToast(err.response?.data?.detail || 'Failed to update cohort access', 'error'),
+  });
+
+  const toggleNominatorMutation = useMutation({
     mutationFn: async ({ userId, isActive }) => {
       const action = isActive ? 'activate' : 'deactivate';
       const response = await api.put(`/admin/users/users/${userId}/${action}`);
       return response.data;
     },
     onSuccess: (_result, variables) => {
-      queryClient.invalidateQueries({ queryKey: ['cohortMentors', cohortId] });
-      showToast(`Account ${variables.isActive ? 'activated' : 'deactivated'}`);
+      queryClient.invalidateQueries({ queryKey: ['adminNominators'] });
+      setSelectedNominatorDetails((current) => current ? { ...current, isActive: variables.isActive } : current);
+      showToast(`Nominator account ${variables.isActive ? 'activated' : 'deactivated'}`);
     },
-    onError: (err) => showToast(err.response?.data?.detail || 'Failed to update account status', 'error'),
+    onError: (err) => showToast(err.response?.data?.detail || 'Failed to update nominator account', 'error'),
   });
 
   const assignMentorMutation = useMutation({
@@ -896,11 +928,11 @@ export function CohortDetail() {
                         {mentor.isLoginActive ? (
                           <button
                             type="button"
-                            onClick={() => toggleAccountMutation.mutate({ userId: mentor.userId, isActive: !mentor.isAccountActive })}
+                            onClick={() => toggleAccountMutation.mutate({ mentorId: mentor.id, isActive: !mentor.isCohortAccessActive })}
                             disabled={toggleAccountMutation.isPending}
-                            className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold disabled:cursor-wait disabled:opacity-50 ${mentor.isAccountActive ? 'border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100' : 'border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100'}`}
-                            title={`Click to ${mentor.isAccountActive ? 'deactivate' : 'activate'} this mentor`}
-                          >{mentor.isAccountActive ? 'Active' : 'Inactive'}</button>
+                            className={`rounded-full border px-2.5 py-1 text-[11px] font-semibold disabled:cursor-wait disabled:opacity-50 ${mentor.isCohortAccessActive ? 'border-emerald-200 bg-emerald-50 text-emerald-700 hover:bg-emerald-100' : 'border-rose-200 bg-rose-50 text-rose-700 hover:bg-rose-100'}`}
+                            title={`Click to ${mentor.isCohortAccessActive ? 'deactivate' : 'activate'} access in this cohort`}
+                          >Cohort {mentor.isCohortAccessActive ? 'Active' : 'Inactive'}</button>
                         ) : (
                           <button
                             type="button"
@@ -1274,7 +1306,7 @@ export function CohortDetail() {
               <option value="ALL">All mentors</option>
               <option value="UNASSIGNED">Unassigned trainees</option>
               {assignmentMentors.map((mentor) => (
-                <option key={mentor.id} value={mentor.id}>{mentor.name}{!mentor.isAccountActive && mentor.isLoginActive ? ' · Deactivated' : ''}</option>
+                <option key={mentor.id} value={mentor.id}>{mentor.name}{mentor.isLoginActive && !mentor.isAccountActive ? ' · Globally deactivated' : mentor.isCohortAccessActive === false ? ' · Cohort access deactivated' : ''}</option>
               ))}
             </select>
           </div>
@@ -1296,10 +1328,10 @@ export function CohortDetail() {
               const cohortMentors = assignmentMentors;
               const assignedMentor = cohortMentors.find((mentor) => mentor.id === currentMentorId);
               const assignedMentorIsDeactivated = Boolean(
-                assignedMentor?.isLoginActive && !assignedMentor?.isAccountActive
+                assignedMentor?.isLoginActive && (!assignedMentor?.isAccountActive || assignedMentor?.isCohortAccessActive === false)
               );
               const assignableMentors = cohortMentors.filter((mentor) =>
-                !(mentor.isLoginActive && !mentor.isAccountActive)
+                mentor.id === currentMentorId || (!(mentor.isLoginActive && !mentor.isAccountActive) && mentor.isCohortAccessActive !== false)
               );
 
               return (
@@ -1333,7 +1365,7 @@ export function CohortDetail() {
                           </option>
                         )}
                         {assignableMentors.filter((mentor) => mentor.id === currentMentorId || mentorOptionsForAssignment.some((option) => option.id === mentor.id)).map((m) => (
-                          <option key={m.id} value={m.id}>
+                          <option key={m.id} value={m.id} disabled={m.id !== currentMentorId && ((!m.isAccountActive && m.isLoginActive) || m.isCohortAccessActive === false)}>
                             {m.name} ({m.employeeId || 'EMP'}) · {m.assignedTraineesCount} trainees
                           </option>
                         ))}
@@ -1459,8 +1491,8 @@ export function CohortDetail() {
           ) : cohortNominators.length === 0 ? (
             <EmptyState
               icon={UserCheck}
-              title="No nominators assigned"
-              description="Create a nominator account to let someone submit candidates for this cohort."
+              title="No nominator accounts"
+              description="Create a nominator account to let someone submit mentor and trainee candidates."
               action={(
                 <button onClick={() => setIsNominatorModalOpen(true)} className="inline-flex items-center gap-2 rounded-xl bg-emerald-600 px-4 py-2 text-xs font-bold text-white">
                   <UserPlus className="h-4 w-4" /> Create Nominator
@@ -1491,8 +1523,8 @@ export function CohortDetail() {
                           role="switch"
                           aria-checked={nominator.isActive}
                           aria-label={`${nominator.isActive ? 'Deactivate' : 'Activate'} ${nominator.name}`}
-                          onClick={() => toggleAccountMutation.mutate({ userId: nominator.id, isActive: !nominator.isActive })}
-                          disabled={toggleAccountMutation.isPending}
+                          onClick={() => toggleNominatorMutation.mutate({ userId: nominator.id, isActive: !nominator.isActive })}
+                          disabled={toggleNominatorMutation.isPending}
                           className={`relative inline-flex h-6 w-11 items-center rounded-full transition-colors disabled:cursor-wait disabled:opacity-50 ${nominator.isActive ? 'bg-emerald-600' : 'bg-slate-300'}`}
                         ><span className={`inline-block h-4 w-4 transform rounded-full bg-white shadow transition-transform ${nominator.isActive ? 'translate-x-6' : 'translate-x-1'}`} /></button>
                       </td>
@@ -1611,180 +1643,6 @@ export function CohortDetail() {
         cohortId={cohortId}
         cohortName={cohort.name}
       />
-
-      {/* MODAL: Mentor details */}
-      {detailMentor && (
-        <Modal
-          isOpen
-          onClose={() => setSelectedMentorDetails(null)}
-          title={`Mentor Details · ${detailMentor.name}`}
-          maxWidth="max-w-5xl"
-        >
-          <div className="space-y-5">
-            <section className="grid sm:grid-cols-2 gap-3 rounded-xl bg-slate-50 border border-slate-100 p-4 text-sm">
-              <div><span className="text-slate-500">Employee ID</span><p className="font-semibold text-slate-800">{detailMentor.employeeId || 'Not provided'}</p></div>
-              <div><span className="text-slate-500">Email</span><p className="font-semibold text-slate-800">{detailMentor.email}</p></div>
-              <div><span className="text-slate-500">Location</span><p className="font-semibold text-slate-800">{detailMentor.location || 'Not provided'}{detailMentor.timezone ? ` · ${detailMentor.timezone}` : ''}</p></div>
-              <div><span className="text-slate-500">Login</span><p className="font-semibold text-slate-800">{!detailMentor.isLoginActive ? 'Not activated' : !detailMentor.isAccountActive ? 'Inactive' : detailMentor.firstLoginPasswordReset ? 'Password setup pending' : 'Active'}</p></div>
-              <div><span className="text-slate-500">Nominated by</span><p className="font-semibold text-slate-800">{detailMentor.nominatorName || 'Platform Administrator'}</p></div>
-              <div><span className="text-slate-500">Nominated on</span><p className="font-semibold text-slate-800">{detailMentor.createdAt ? new Date(detailMentor.createdAt).toLocaleDateString() : 'Not provided'}</p></div>
-            </section>
-
-            {detailMentor.isLoginActive && detailMentor.userId && (
-              <div className="flex flex-col gap-2 rounded-xl border border-amber-200 bg-amber-50 p-4 sm:flex-row sm:items-center sm:justify-between">
-                <div>
-                  <p className="text-sm font-bold text-amber-900">Mentor login credentials</p>
-                  <p className="mt-0.5 text-xs text-amber-800">Passwords are stored securely and cannot be viewed. Reset to generate a one-time temporary password.</p>
-                </div>
-                <button
-                  type="button"
-                  onClick={() => resetMentorPasswordMutation.mutate(detailMentor.userId)}
-                  disabled={resetMentorPasswordMutation.isPending}
-                  className="inline-flex shrink-0 items-center justify-center gap-1.5 rounded-lg bg-amber-700 px-3 py-2 text-xs font-bold text-white hover:bg-amber-800 disabled:opacity-50"
-                >
-                  <KeyRound className="h-3.5 w-3.5" />
-                  {resetMentorPasswordMutation.isPending ? 'Generating…' : 'Reset password'}
-                </button>
-              </div>
-            )}
-
-            <section>
-              <div className="flex items-center justify-between mb-3">
-                <h4 className="font-bold text-slate-800">Allocated Trainees</h4>
-                <span className="text-xs font-semibold text-purple-700">{detailActiveTrainees.length} active · {detailDroppedOut} dropped out</span>
-              </div>
-              <DataTable
-                rows={detailTrainees}
-                emptyMessage="No trainees assigned."
-                pageSize={10}
-                columns={[
-                  { key: 'name', header: 'Trainee', render: (t) => <PersonCell primary={t.name} secondary={t.email} /> },
-                  { key: 'employeeId', header: 'Employee ID', render: (t) => <span className="font-mono text-xs">{t.employeeId || '—'}</span> },
-                  { key: 'location', header: 'Location', render: (t) => t.location || '—' },
-                  {
-                    key: 'progress',
-                    header: 'Progress',
-                    className: 'min-w-[120px]',
-                    render: (t) => (
-                      <div className="flex items-center gap-2">
-                        <div className="flex-1"><ProgressBar percent={t.percentComplete || 0} size="sm" showLabel={false} /></div>
-                        <span className="text-xs font-bold w-9 text-right">{Math.round(t.percentComplete || 0)}%</span>
-                      </div>
-                    ),
-                  },
-                  {
-                    key: 'status',
-                    header: 'Status',
-                    render: (t) =>
-                      t.status === 'dropped_out' ? (
-                        <div>
-                          <Badge variant="danger">Dropped out</Badge>
-                          {t.dropoutReason && <p className="mt-1 text-[11px] text-rose-600">{t.dropoutReason}</p>}
-                        </div>
-                      ) : (
-                        <Badge variant="active">Active</Badge>
-                      ),
-                  },
-                  {
-                    key: 'feedback',
-                    header: '',
-                    render: (t) => (
-                      <button
-                        type="button"
-                        onClick={() => {
-                          setSelectedTraineeForFeedback({
-                            ...t,
-                            mentorName: detailMentor.name,
-                            mentorEmployeeId: detailMentor.employeeId,
-                            mentorEmail: detailMentor.email,
-                            mentorDepartment: detailMentor.department,
-                            mentorNominatedBy: detailMentor.nominatorName,
-                          });
-                          setIsTraineeFeedbackModalOpen(true);
-                        }}
-                        className="inline-flex items-center gap-1 text-xs font-bold text-purple-700 hover:text-purple-900 whitespace-nowrap"
-                      >
-                        <Eye className="w-3.5 h-3.5" /> Details & feedback
-                      </button>
-                    ),
-                  },
-                ]}
-              />
-            </section>
-
-            <section>
-              <div className="flex items-center justify-between mb-3">
-                <h4 className="font-bold text-slate-800">Training Groups & Sessions</h4>
-                <span className="text-xs text-slate-500">{detailBatches.length} groups · {detailSessionCount} sessions</span>
-              </div>
-              {cohortSessionOverviewLoading ? (
-                <p className="text-sm text-slate-500">Loading group and session details…</p>
-              ) : detailBatches.length ? (
-                <div className="space-y-4">
-                  {detailBatches.map((batch) => (
-                    <div key={batch.id} className="rounded-xl border border-emerald-100 bg-emerald-50/40 p-4 space-y-3">
-                      <div className="flex items-center justify-between gap-3">
-                        <h5 className="font-bold text-slate-800">{batch.name}</h5>
-                        <span className="text-xs text-slate-500">{batch.traineeCount} trainees</span>
-                      </div>
-                      <DataTable
-                        rows={batch.trainees}
-                        rowKey={(t) => t.traineeId}
-                        emptyMessage="No trainees in this group."
-                        pageSize={10}
-                        columns={[
-                          { key: 'name', header: 'Trainee', render: (t) => <PersonCell primary={t.name} secondary={t.email} /> },
-                          { key: 'location', header: 'Location', render: (t) => t.location || '—' },
-                          {
-                            key: 'status',
-                            header: 'Status',
-                            render: (t) => t.status === 'dropped_out' ? <Badge variant="danger">Dropped out</Badge> : <Badge variant="active">Active</Badge>,
-                          },
-                        ]}
-                      />
-                      <div className="space-y-2">
-                        {batch.sessions.length ? batch.sessions.map((session) => (
-                          <div key={session.id} className="rounded-lg border border-slate-200 bg-white p-3">
-                            <div className="flex flex-wrap items-start justify-between gap-2">
-                              <div>
-                                <p className="font-bold text-sm text-slate-800">{session.title}</p>
-                                <p className="text-xs text-slate-500">{new Date(session.sessionDate).toLocaleDateString()} · {session.startTime}–{session.endTime}</p>
-                              </div>
-                              <Badge>{session.status?.replace('_', ' ')}</Badge>
-                            </div>
-                            <p className="text-xs text-slate-500 mt-2">Attendance: {session.presentCount} present · {session.attendanceCount}/{session.attendance.length} marked</p>
-                            {session.attendance.length > 0 && (
-                              <div className="mt-2">
-                                <DataTable
-                                  rows={session.attendance}
-                                  rowKey={(record) => record.traineeId}
-                                  pageSize={10}
-                                  columns={[
-                                    { key: 'name', header: 'Trainee' },
-                                    {
-                                      key: 'status',
-                                      header: 'Attendance',
-                                      render: (record) => (
-                                        <span className={`text-xs font-bold capitalize ${record.status === 'present' ? 'text-emerald-600' : record.status === 'absent' ? 'text-rose-600' : 'text-slate-400'}`}>
-                                          {record.status.replace('_', ' ')}
-                                        </span>
-                                      ),
-                                    },
-                                  ]}
-                                />
-                              </div>
-                            )}
-                          </div>
-                        )) : <p className="text-xs text-slate-500">No sessions scheduled for this group.</p>}
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              ) : <p className="text-sm text-slate-500">No training groups created for this mentor.</p>}
-            </section>
-          </div>
-        </Modal>
-      )}
 
       {/* MODAL: Activate Mentor Login */}
       <Modal isOpen={isActivateModalOpen} onClose={() => setIsActivateModalOpen(false)} title={`Activate Login: ${targetMentor?.name}`}>

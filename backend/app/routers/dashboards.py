@@ -63,6 +63,8 @@ async def get_mentor_dashboard(
     db: AsyncIOMotorDatabase = Depends(get_database),
     current_user: dict = Depends(require_mentor)
 ):
+    if current_user.get("role") == "mentor" and not cohort_id:
+        raise HTTPException(status_code=400, detail="Select a cohort to view its workspace", headers={"code": "COHORT_REQUIRED"})
     trainees = await ProgressService.get_mentor_trainees(db, current_user, cohort_id=cohort_id)
     active_trainees = [t for t in trainees if t.get("status") != "dropped_out"]
     dropped_out_trainees = [t for t in trainees if t.get("status") == "dropped_out"]

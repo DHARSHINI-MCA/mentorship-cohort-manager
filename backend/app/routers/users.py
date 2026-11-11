@@ -7,6 +7,7 @@ from app.core.security import get_password_hash, generate_nominator_temporary_pa
 from app.core.deps import require_admin
 from app.services.nomination_service import NominationService
 from app.schemas.users import NominatorCreate
+from app.services.identity_service import claim_person_identity, release_person_identity
 
 router = APIRouter(tags=["Users & Nominators"])
 
@@ -42,13 +43,6 @@ async def create_nominator(
 ):
     """Create a nominator login. Nominators are not tied to any cohort."""
     normalized_email = str(data.email).lower()
-    if await db.users.find_one({"email": normalized_email}):
-        raise HTTPException(
-            status_code=409,
-            detail="A user with this email already exists",
-            headers={"code": "EMAIL_EXISTS"}
-        )
-
     name = data.name.strip()
     employee_id = data.employeeId.strip()
     if not name or not employee_id:
@@ -56,6 +50,14 @@ async def create_nominator(
 
     temporary_password = generate_nominator_temporary_password(name, employee_id)
     now = datetime.now(timezone.utc)
+    nominator_id = ObjectId()
+    await claim_person_identity(
+        db,
+        owner_type="nominator",
+        owner_id=str(nominator_id),
+        email=normalized_email,
+        employee_id=employee_id,
+    )
     user_doc = {
         "name": name,
         "employeeId": employee_id,
@@ -67,11 +69,16 @@ async def create_nominator(
         "createdAt": now,
         "createdBy": ObjectId(current_user["id"]),
     }
-    result = await db.users.insert_one(user_doc)
+    user_doc["_id"] = nominator_id
+    try:
+        await db.users.insert_one(user_doc)
+    except Exception:
+        await release_person_identity(db, str(nominator_id))
+        raise
 
     return {
         "nominator": {
-            "id": str(result.inserted_id),
+            "id": str(nominator_id),
             "name": name,
             "employeeId": employee_id,
             "email": normalized_email,

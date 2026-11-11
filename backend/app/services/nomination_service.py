@@ -6,6 +6,7 @@ from fastapi import HTTPException, status
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from app.core.security import get_password_hash, generate_temporary_password
 from app.schemas.nominees import MentorNomineeCreate, TraineeNomineeCreate
+from app.services.identity_service import claim_person_identity, release_person_identity
 
 KIND_COLLECTION = {"mentor": "mentors", "trainee": "trainees"}
 
@@ -36,16 +37,20 @@ class NominationService:
         """A person cannot be nominated twice while they are still in the pool or
         in a cohort that has not been closed."""
         collection = db[KIND_COLLECTION[kind]]
-        async for existing in collection.find({"email": email}, {"cohortId": 1}):
-            cohort_ref = existing.get("cohortId")
-            if not cohort_ref:
+        async for existing in collection.find({"email": email}, {"cohortId": 1, "cohortIds": 1}):
+            cohort_refs = existing.get("cohortIds") or ([existing.get("cohortId")] if existing.get("cohortId") else [])
+            if not cohort_refs:
                 blocked = True
             else:
-                try:
-                    cohort = await db.cohorts.find_one({"_id": ObjectId(str(cohort_ref))}, {"status": 1})
-                except Exception:
-                    cohort = None
-                blocked = bool(cohort and cohort.get("status") != "closed")
+                blocked = False
+                for cohort_ref in cohort_refs:
+                    try:
+                        cohort = await db.cohorts.find_one({"_id": ObjectId(str(cohort_ref))}, {"status": 1})
+                    except Exception:
+                        cohort = None
+                    if cohort and cohort.get("status") != "closed":
+                        blocked = True
+                        break
             if blocked:
                 raise HTTPException(
                     status_code=status.HTTP_409_CONFLICT,
@@ -63,11 +68,24 @@ class NominationService:
     ) -> dict:
         doc = data.model_dump()
         doc["email"] = str(doc["email"]).lower()
+        doc["employeeId"] = str(doc.get("employeeId") or "").strip()
         doc["department"] = doc.get("department") or ""
         doc["skills"] = doc.get("skills") or []
+        profile_id = ObjectId()
+        await claim_person_identity(
+            db,
+            owner_type=kind,
+            owner_id=str(profile_id),
+            email=doc["email"],
+            employee_id=doc["employeeId"],
+        )
         await NominationService._ensure_not_duplicate(db, kind, doc["email"])
 
         doc["cohortId"] = cohort_id
+        if kind == "mentor":
+            doc["cohortIds"] = [cohort_id] if cohort_id else []
+        if cohort_id:
+            doc["cohortAssignmentHistory"] = [{"fromCohortId": None, "toCohortId": cohort_id, "at": datetime.now(timezone.utc)}]
         doc["nominatedBy"] = nominated_by_user["id"]
         doc["createdAt"] = datetime.now(timezone.utc)
         if kind == "mentor":
@@ -75,8 +93,13 @@ class NominationService:
         else:
             doc["mentorId"] = None
 
-        result = await db[KIND_COLLECTION[kind]].insert_one(doc)
-        doc["id"] = str(result.inserted_id)
+        doc["_id"] = profile_id
+        try:
+            await db[KIND_COLLECTION[kind]].insert_one(doc)
+        except Exception:
+            await release_person_identity(db, str(profile_id))
+            raise
+        doc["id"] = str(profile_id)
         doc.pop("_id", None)
         return doc
 
@@ -143,45 +166,49 @@ class NominationService:
         """Admin view of every nominated mentor/trainee, with their nominator and
         (if any) the cohort they were added to."""
         query: dict = {}
+        filters = []
         if kind == "mentor":
             if allocation == "unallocated":
-                query["$or"] = [
+                filters.append({"$or": [
                     {"cohortIds": {"$size": 0}},
                     {"cohortIds": None},
                     {"cohortIds": {"$exists": False}, "cohortId": None}
-                ]
+                ]})
             elif allocation == "allocated":
-                query["$or"] = [
+                filters.append({"$or": [
                     {"cohortIds.0": {"$exists": True}},
                     {"cohortId": {"$ne": None}}
-                ]
+                ]})
         else:
             if allocation == "unallocated":
-                query["cohortId"] = None
+                filters.append({"cohortId": None})
             elif allocation == "allocated":
-                query["cohortId"] = {"$ne": None}
+                filters.append({"cohortId": {"$ne": None}})
 
         if nominator_id:
             if nominator_id in ["admin", "platform_admin", "PLATFORM_ADMIN"]:
                 admin_users = await db.users.find({"role": "admin"}, {"_id": 1}).to_list(length=None)
                 admin_ids = [str(u["_id"]) for u in admin_users] + [u["_id"] for u in admin_users]
-                query["$or"] = [
+                filters.append({"$or": [
                     {"nominatedBy": {"$in": admin_ids}},
                     {"nominatedBy": None},
                     {"nominatedBy": ""},
                     {"nominatedBy": {"$exists": False}}
-                ]
+                ]})
             else:
                 nominator_ids_to_match = [nominator_id]
                 try:
                     nominator_ids_to_match.append(ObjectId(nominator_id))
                 except Exception:
                     pass
-                query["nominatedBy"] = {"$in": nominator_ids_to_match}
+                filters.append({"nominatedBy": {"$in": nominator_ids_to_match}})
 
         if search:
             pattern = {"$regex": re.escape(search.strip()), "$options": "i"}
-            query["$or"] = [{"name": pattern}, {"email": pattern}, {"employeeId": pattern}, {"location": pattern}]
+            filters.append({"$or": [{"name": pattern}, {"email": pattern}, {"employeeId": pattern}, {"location": pattern}]})
+
+        if filters:
+            query["$and"] = filters
 
         collection = db[KIND_COLLECTION[kind]]
         total = await collection.count_documents(query)
@@ -201,9 +228,12 @@ class NominationService:
         user_oids = _oid_list([d.get("userId") for d in docs if d.get("userId")])
 
         nominator_names = {}
+        admin_ids = set()
         if nominator_ids:
-            async for u in db.users.find({"_id": {"$in": nominator_ids}}, {"name": 1}):
-                nominator_names[str(u["_id"])] = u.get("name", "")
+            async for u in db.users.find({"_id": {"$in": nominator_ids}}, {"name": 1, "role": 1}):
+                nominator_names[str(u["_id"])] = "Platform Administrator" if u.get("role") == "admin" else u.get("name", "")
+                if u.get("role") == "admin":
+                    admin_ids.add(str(u["_id"]))
         
         cohort_dict = {}
         if cohort_ids:
@@ -243,7 +273,7 @@ class NominationService:
                 "experience": d.get("experience"),
                 "skills": d.get("skills", []),
                 "nominatedBy": str(d["nominatedBy"]) if d.get("nominatedBy") else None,
-                "nominatorName": nominator_names.get(str(d.get("nominatedBy")), "Platform Administrator"),
+                "nominatorName": "Platform Administrator" if not d.get("nominatedBy") or str(d.get("nominatedBy")) in admin_ids else nominator_names.get(str(d.get("nominatedBy")), "Unknown nominator"),
                 "cohortId": first_cohort_id,
                 "cohortName": first_cohort_name,
                 "cohortIds": c_ids,
@@ -313,7 +343,7 @@ class NominationService:
                     new_cohorts = list(dict.fromkeys(existing_cohorts + [cohort_id]))
                     await collection.update_one(
                         {"_id": object_id},
-                        {"$set": {"cohortIds": new_cohorts, "cohortId": doc.get("cohortId") or cohort_id}}
+                        {"$set": {"cohortIds": new_cohorts, "cohortId": doc.get("cohortId") or cohort_id}, "$push": {"cohortAssignmentHistory": {"action": "assigned", "cohortId": cohort_id, "at": datetime.now(timezone.utc)}}}
                     )
                     allocated += 1
             else:
@@ -322,7 +352,7 @@ class NominationService:
                 else:
                     await collection.update_one(
                         {"_id": object_id, "cohortId": None},
-                        {"$set": {"cohortId": cohort_id}}
+                        {"$set": {"cohortId": cohort_id}, "$push": {"cohortAssignmentHistory": {"fromCohortId": None, "toCohortId": cohort_id, "at": datetime.now(timezone.utc)}}}
                     )
                     allocated += 1
         return {"allocated": allocated, "skipped": skipped, "cohortId": cohort_id}
@@ -359,7 +389,7 @@ class NominationService:
                 new_cohorts = list(dict.fromkeys(existing_cohorts + [cohort_id]))
                 await db.mentors.update_one(
                     {"_id": existing_mentor["_id"]},
-                    {"$set": {"cohortIds": new_cohorts, "cohortId": existing_mentor.get("cohortId") or cohort_id}}
+                    {"$set": {"cohortIds": new_cohorts, "cohortId": existing_mentor.get("cohortId") or cohort_id}, "$push": {"cohortAssignmentHistory": {"action": "assigned", "cohortId": cohort_id, "at": datetime.now(timezone.utc)}}}
                 )
                 existing_mentor["id"] = str(existing_mentor["_id"])
                 existing_mentor["cohortId"] = cohort_id
@@ -452,6 +482,7 @@ class NominationService:
 
             doc["employeeId"] = doc.get("employeeId", "")
             doc["cohortId"] = str(cohort_id)
+            doc["isCohortAccessActive"] = (doc.get("cohortAccess") or {}).get(str(cohort_id), True)
             c_ids = [str(cid) for cid in (doc.get("cohortIds") or ([doc.get("cohortId")] if doc.get("cohortId") else [])) if cid]
             doc["cohortIds"] = c_ids
             if doc.get("nominatedBy"):
@@ -496,7 +527,7 @@ class NominationService:
             {"$set": {
                 "cohortIds": combined,
                 "cohortId": combined[0] if combined else None
-            }}
+            }, "$push": {"cohortAssignmentHistory": {"action": "assigned", "cohortIds": clean_cohort_ids, "at": datetime.now(timezone.utc)}}}
         )
         return {
             "mentorId": mentor_id,
@@ -535,7 +566,7 @@ class NominationService:
             {"$set": {
                 "cohortIds": clean_cohort_ids,
                 "cohortId": clean_cohort_ids[0] if clean_cohort_ids else None
-            }}
+            }, "$push": {"cohortAssignmentHistory": {"action": "updated", "previousCohortIds": [str(c) for c in (mentor.get("cohortIds") or ([mentor.get("cohortId")] if mentor.get("cohortId") else [])) if c], "cohortIds": clean_cohort_ids, "at": datetime.now(timezone.utc)}}}
         )
         return {
             "mentorId": mentor_id,
@@ -566,7 +597,7 @@ class NominationService:
                 cohort = None
             if not cohort:
                 raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Cohort not found")
-            if cohort.get("status") == "closed":
+            if cohort.get("status") == "closed" and str(cohort_id) != current_cohort_id:
                 raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="This cohort is closed and cannot accept trainees")
 
             update_data = {"cohortId": cohort_id}
@@ -579,11 +610,11 @@ class NominationService:
                     })
                     if not mentor:
                         update_data["mentorId"] = None
-            await db.trainees.update_one({"_id": ObjectId(trainee_id)}, {"$set": update_data})
+            await db.trainees.update_one({"_id": ObjectId(trainee_id)}, {"$set": update_data, "$push": {"cohortAssignmentHistory": {"fromCohortId": current_cohort_id, "toCohortId": cohort_id, "at": datetime.now(timezone.utc)}}})
         else:
             await db.trainees.update_one(
                 {"_id": ObjectId(trainee_id)},
-                {"$set": {"cohortId": None, "mentorId": None}}
+                {"$set": {"cohortId": None, "mentorId": None}, "$push": {"cohortAssignmentHistory": {"fromCohortId": current_cohort_id, "toCohortId": None, "at": datetime.now(timezone.utc)}}}
             )
 
         updated = await db.trainees.find_one({"_id": ObjectId(trainee_id)})
@@ -628,6 +659,24 @@ class NominationService:
             "isActive": is_active,
             "success": True
         }
+
+    @staticmethod
+    async def toggle_mentor_cohort_access(db: AsyncIOMotorDatabase, mentor_id: str, cohort_id: str, is_active: bool) -> dict:
+        """Toggle cohort-scoped access without changing the mentor's global account."""
+        try:
+            mentor = await db.mentors.find_one({"_id": ObjectId(mentor_id)})
+        except Exception:
+            mentor = None
+        if not mentor:
+            raise HTTPException(status_code=404, detail="Mentor not found")
+        assigned = [str(cid) for cid in (mentor.get("cohortIds") or ([mentor.get("cohortId")] if mentor.get("cohortId") else [])) if cid]
+        if str(cohort_id) not in assigned:
+            raise HTTPException(status_code=404, detail="Mentor is not assigned to this cohort")
+        await db.mentors.update_one(
+            {"_id": mentor["_id"]},
+            {"$set": {f"cohortAccess.{cohort_id}": bool(is_active)}, "$push": {"cohortAccessHistory": {"cohortId": str(cohort_id), "isActive": bool(is_active), "at": datetime.now(timezone.utc)}}},
+        )
+        return {"mentorId": mentor_id, "cohortId": str(cohort_id), "isActive": bool(is_active), "success": True}
 
     @staticmethod
     async def get_nominator_nominees_details(
@@ -731,7 +780,6 @@ class NominationService:
                 {"$set": {
                     "passwordHash": get_password_hash(temporary_password),
                     "role": "mentor",
-                    "isActive": True,
                     "firstLoginPasswordReset": True,
                     "temporaryPassword": None,
                 }}
@@ -743,7 +791,7 @@ class NominationService:
                 "email": mentor["email"],
                 "passwordHash": get_password_hash(temporary_password),
                 "role": "mentor",
-                "isActive": True,
+                "isActive": bool(mentor.get("isActive", True)),
                 "firstLoginPasswordReset": True,
                 "createdAt": datetime.now(timezone.utc)
             }

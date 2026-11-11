@@ -195,9 +195,10 @@ class CohortService:
     async def get_cohorts(
         db: AsyncIOMotorDatabase,
         page: int = 1,
-        limit: int = 20
+        limit: int = 20,
+        allowed_cohort_ids: list[str] | None = None,
     ) -> dict:
-        query = {}
+        query = {"_id": {"$in": [ObjectId(cid) for cid in allowed_cohort_ids if ObjectId.is_valid(cid)]}} if allowed_cohort_ids is not None else {}
 
         skip = (page - 1) * limit
         cursor = db.cohorts.find(query).sort("createdAt", -1).skip(skip).limit(limit)

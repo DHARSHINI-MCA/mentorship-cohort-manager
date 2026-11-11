@@ -10,7 +10,8 @@ class FeedbackService:
         db: AsyncIOMotorDatabase,
         trainee_id: str,
         feedback_data: FeedbackSubmitRequest,
-        current_user: dict
+        current_user: dict,
+        cohort_id: str = None,
     ) -> dict:
         try:
             trainee = await db.trainees.find_one({"_id": ObjectId(trainee_id)})
@@ -32,12 +33,18 @@ class FeedbackService:
         # Mentor authorization
         if current_user.get("role") == "mentor":
             mentor = await db.mentors.find_one({"_id": ObjectId(trainee.get("mentorId"))}) if trainee.get("mentorId") else None
-            if not mentor or str(mentor.get("userId")) != str(current_user["id"]):
+            trainee_cohort_id = str(trainee.get("cohortId")) if trainee.get("cohortId") else None
+            if not mentor or str(mentor.get("userId")) != str(current_user["id"]) or (cohort_id and str(cohort_id) != trainee_cohort_id):
                 raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN,
                     detail="You are not authorized to submit feedback for this trainee",
                     headers={"code": "FORBIDDEN"}
                 )
+            mentor_profile = await db.mentors.find_one({"userId": current_user["id"], "$or": [{"cohortIds": cohort_id or trainee_cohort_id}, {"cohortId": cohort_id or trainee_cohort_id}]})
+            if not mentor_profile:
+                raise HTTPException(status_code=403, detail="You are not authorized to access this cohort", headers={"code": "FORBIDDEN"})
+            if (mentor_profile.get("cohortAccess") or {}).get(str(cohort_id or trainee_cohort_id), True) is False:
+                raise HTTPException(status_code=403, detail="Your access to this cohort is deactivated", headers={"code": "COHORT_ACCESS_INACTIVE"})
 
         cohort_id = str(trainee["cohortId"])
         cohort = await db.cohorts.find_one({"_id": ObjectId(cohort_id)})

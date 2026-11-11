@@ -7,6 +7,29 @@ body {
   background-color: #f8fafc;
 }
 
+/* Keep protected pages aligned to the hosted app's centered content width. */
+.app-content-shell {
+  box-sizing: border-box;
+  width: 100%;
+  max-width: 1520px;
+  padding-inline: 16px;
+}
+
+@media (min-width: 1280px) {
+  .app-content-shell {
+    width: 80vw;
+    padding-inline: 0;
+  }
+}
+
+.app-content-shell > * {
+  box-sizing: border-box;
+  width: 100% !important;
+  max-width: none !important;
+  margin-inline: 0 !important;
+  padding-inline: 0 !important;
+}
+
 /* Custom scrollbars */
 ::-webkit-scrollbar {
   width: 6px;

@@ -1,14 +1,16 @@
 import React from 'react';
 import { useQuery } from '@tanstack/react-query';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import api from '../../api/client';
 import { EmptyState } from '../../components/EmptyState';
 import { ArrowLeft, BookOpen, CalendarDays } from 'lucide-react';
 
 export function MentorPlan() {
+  const [params] = useSearchParams();
+  const cohortId = params.get('cohortId');
   const { data: plan, isLoading, error } = useQuery({
-    queryKey: ['mentorCohortPlan'],
-    queryFn: async () => (await api.get('/mentor/cohort-plan')).data,
+    queryKey: ['mentorCohortPlan', cohortId],
+    queryFn: async () => (await api.get('/mentor/cohort-plan', { params: cohortId ? { cohortId } : {} })).data,
   });
 
   const { data: talentnextCourses = [] } = useQuery({
@@ -38,7 +40,7 @@ export function MentorPlan() {
   }
 
   if (error || !plan) {
-    return <EmptyState icon={BookOpen} title="No training plan allocated" description="The cohort administrator has not applied a training plan yet." action={<Link to="/mentor/dashboard" className="text-xs font-bold text-emerald-700">← Back to trainees</Link>} />;
+    return <EmptyState icon={BookOpen} title="No training plan allocated" description="The cohort administrator has not applied a training plan yet." action={<Link to={cohortId ? `/mentor/dashboard?cohortId=${cohortId}` : '/mentor/dashboard'} className="text-xs font-bold text-emerald-700">← Back to cohort</Link>} />;
   }
 
   const weeks = plan.weeks || [];
@@ -49,7 +51,7 @@ export function MentorPlan() {
 
   return (
     <main className="mx-auto max-w-6xl px-4 py-5 sm:px-6 lg:px-8">
-      <Link to="/mentor/dashboard" className="mb-4 inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-slate-900">
+      <Link to={cohortId ? `/mentor/dashboard?cohortId=${cohortId}` : '/mentor/dashboard'} className="mb-4 inline-flex items-center gap-1.5 text-xs font-semibold text-slate-500 hover:text-slate-900">
         <ArrowLeft className="h-4 w-4" /> Back to trainees
       </Link>
 

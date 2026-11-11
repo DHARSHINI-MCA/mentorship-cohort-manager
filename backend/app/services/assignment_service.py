@@ -43,8 +43,20 @@ class AssignmentService:
                 headers={"code": "NOT_FOUND"}
             )
 
-        # Keep existing assignments intact, but reject any new or changed
-        # assignment to a mentor whose login account has been deactivated.
+        # Deactivated accounts and cohort-disabled mentors cannot receive
+        # new trainee assignments. Existing assignments remain historical.
+        if mentor.get("isActive", True) is False:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="This mentor is deactivated and cannot be assigned to trainees",
+                headers={"code": "MENTOR_DEACTIVATED"}
+            )
+        if (mentor.get("cohortAccess") or {}).get(str(trainee.get("cohortId")), True) is False:
+            raise HTTPException(
+                status_code=status.HTTP_409_CONFLICT,
+                detail="This mentor's access to the cohort is deactivated",
+                headers={"code": "COHORT_ACCESS_INACTIVE"}
+            )
         if mentor.get("userId"):
             try:
                 mentor_user_id = ObjectId(mentor["userId"])

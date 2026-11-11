@@ -76,3 +76,21 @@ require_mentor = require_roles(["mentor"])
 # Admin + mentor only. Nominators are independent of cohorts and must never
 # reach cohort, template, plan or mentor/trainee-assignment data.
 require_any_authenticated = require_roles(["admin", "mentor"])
+
+
+async def ensure_mentor_cohort_access(db: AsyncIOMotorDatabase, current_user: dict, cohort_id: str) -> dict:
+    """Authorize a mentor within one cohort; global account status is checked by get_current_user."""
+    if current_user.get("role") != "mentor":
+        return None
+    mentor = await db.mentors.find_one({
+        "userId": current_user["id"],
+        "$or": [{"cohortIds": str(cohort_id)}, {"cohortId": str(cohort_id)}],
+    })
+    if not mentor:
+        raise HTTPException(status_code=403, detail="You are not authorized to access this cohort", headers={"code": "FORBIDDEN"})
+    cohort_access = mentor.get("cohortAccess") or {}
+    if cohort_access.get(str(cohort_id), True) is False:
+        raise HTTPException(status_code=403, detail="Your access to this cohort is deactivated", headers={"code": "COHORT_ACCESS_INACTIVE"})
+    if mentor.get("isActive", True) is False:
+        raise HTTPException(status_code=403, detail="Account is deactivated", headers={"code": "ACCOUNT_INACTIVE"})
+    return mentor

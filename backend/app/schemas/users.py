@@ -15,6 +15,7 @@ class UserCreateWithTempPassword(BaseModel):
     """Used by admin to create users with temporary passwords"""
     name: str
     email: EmailStr
+    employeeId: str = Field(min_length=1, max_length=64)
     role: str  # "nominator" | "mentor" | "trainee"
     location: Optional[str] = None
     timezone: Optional[str] = None

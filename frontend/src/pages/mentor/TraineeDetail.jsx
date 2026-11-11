@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from 'react';
-import { useParams, Link } from 'react-router-dom';
+import { useParams, Link, useSearchParams } from 'react-router-dom';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import api from '../../api/client';
 import { useToast } from '../../context/ToastContext';
@@ -25,6 +25,9 @@ const RATING_LABELS = {
 
 export function TraineeDetail() {
   const { id: traineeId } = useParams();
+  const [searchParams] = useSearchParams();
+  const cohortId = searchParams.get('cohortId');
+  const cohortContext = cohortId ? `?cohort_id=${encodeURIComponent(cohortId)}` : '';
   const queryClient = useQueryClient();
   const { showToast } = useToast();
   const { role } = useAuth();
@@ -35,9 +38,9 @@ export function TraineeDetail() {
 
   // 1. Fetch Trainee Details (includes trainee, cohort, plan, progress, feedbackForm, feedbackHistory)
   const { data, isLoading, isError, error } = useQuery({
-    queryKey: ['traineeDetail', traineeId],
+    queryKey: ['traineeDetail', traineeId, cohortId],
     queryFn: async () => {
-      const res = await api.get(`/mentor/trainees/${traineeId}`);
+      const res = await api.get(`/mentor/trainees/${traineeId}`, { params: cohortId ? { cohort_id: cohortId } : {} });
       return res.data;
     },
   });
@@ -78,7 +81,7 @@ export function TraineeDetail() {
   // Mutations
   const updateProgressMutation = useMutation({
     mutationFn: async (payload) => {
-      return await api.patch(`/mentor/trainees/${traineeId}/progress`, payload);
+      return await api.patch(`/mentor/trainees/${traineeId}/progress${cohortContext}`, payload);
     },
     onSuccess: (updatedProg) => {
       queryClient.invalidateQueries({ queryKey: ['traineeDetail', traineeId] });
@@ -92,7 +95,7 @@ export function TraineeDetail() {
 
   const submitFeedbackMutation = useMutation({
     mutationFn: async ({ week, answersPayload, advanceToNext = false }) => {
-      const res = await api.post(`/mentor/trainees/${traineeId}/feedback`, {
+      const res = await api.post(`/mentor/trainees/${traineeId}/feedback${cohortContext}`, {
         weekNumber: parseInt(week, 10),
         answers: answersPayload,
       });
@@ -113,7 +116,7 @@ export function TraineeDetail() {
 
   const updateTalentNextMutation = useMutation({
     mutationFn: async ({ courseId, completed }) => {
-      const res = await api.patch(`/mentor/trainees/${traineeId}/talentnext/${courseId}`, {
+      const res = await api.patch(`/mentor/trainees/${traineeId}/talentnext/${courseId}${cohortContext}`, {
         completed,
       });
       return res.data;
@@ -130,7 +133,7 @@ export function TraineeDetail() {
   });
 
   const dropoutMutation = useMutation({
-    mutationFn: async () => api.patch(`/mentor/trainees/${traineeId}/dropout`, {}),
+    mutationFn: async () => api.patch(`/mentor/trainees/${traineeId}/dropout${cohortContext}`, {}),
     onSuccess: async () => {
       await Promise.all([
         queryClient.invalidateQueries({ queryKey: ['traineeDetail', traineeId] }),
@@ -223,7 +226,7 @@ export function TraineeDetail() {
           ? 'You do not have permission to view this trainee\'s profile. This trainee may be assigned to another mentor.'
           : errorMsg}
         action={
-          <Link to="/mentor/dashboard" className="text-xs font-bold text-emerald-600">
+          <Link to={cohortId ? `/mentor/dashboard?cohortId=${cohortId}` : '/mentor/dashboard'} className="text-xs font-bold text-emerald-600">
             &larr; Back to My Trainees
           </Link>
         }
@@ -237,7 +240,7 @@ export function TraineeDetail() {
         title="Trainee not found"
         description="The trainee record does not exist or you do not have permission to view it."
         action={
-          <Link to="/mentor/dashboard" className="text-xs font-bold text-emerald-600">
+          <Link to={cohortId ? `/mentor/dashboard?cohortId=${cohortId}` : '/mentor/dashboard'} className="text-xs font-bold text-emerald-600">
             &larr; Back to Dashboard
           </Link>
         }
@@ -256,7 +259,7 @@ export function TraineeDetail() {
       {/* Back button & Trainee Header Card */}
       <div>
         <Link
-          to="/mentor/dashboard"
+          to={cohortId ? `/mentor/dashboard?cohortId=${cohortId}` : '/mentor/dashboard'}
           className="inline-flex items-center gap-1.5 text-xs font-bold text-slate-500 hover:text-slate-800 transition-colors mb-3"
         >
           <ArrowLeft className="w-4 h-4" />

@@ -7,7 +7,7 @@ from bson import ObjectId
 from datetime import datetime
 from typing import Optional
 from app.core.db import get_database
-from app.core.deps import require_roles
+from app.core.deps import require_roles, ensure_mentor_cohort_access
 from app.schemas.batches import (
     BatchCreate, BatchUpdate, BatchResponse, BatchListItem,
     BatchAddTraineesRequest, BatchRemoveTraineesRequest,
@@ -43,6 +43,7 @@ async def create_batch(
         # Check mentor has access to this cohort
         mentor_profile_ids = []
         if current_user.get("role") == "mentor":
+            await ensure_mentor_cohort_access(db, current_user, data.cohortId)
             mentor_profiles = await db.mentors.find({
                 "$or": [{"cohortIds": data.cohortId}, {"cohortId": data.cohortId}],
                 "userId": current_user["id"]
@@ -177,6 +178,8 @@ async def list_batches(
     - Admins see all batches
     """
     try:
+        if current_user.get("role") == "mentor" and not cohort_id:
+            raise HTTPException(status_code=400, detail="Select a cohort to view batches", headers={"code": "COHORT_REQUIRED"})
         query = {}
         
         # Build query based on user role
@@ -197,15 +200,7 @@ async def list_batches(
             query["cohortId"] = {"$in": [cohort_oid, cohort_id]} if cohort_oid else cohort_id
 
             if current_user.get("role") == "mentor":
-                mentor_profile = await db.mentors.find_one({
-                    "$or": [{"cohortIds": cohort_id}, {"cohortId": cohort_id}],
-                    "userId": current_user["id"]
-                })
-                if not mentor_profile:
-                    raise HTTPException(
-                        status_code=status.HTTP_403_FORBIDDEN,
-                        detail="You don't have access to this cohort"
-                    )
+                await ensure_mentor_cohort_access(db, current_user, cohort_id)
         if status:
             query["status"] = status
         
@@ -249,6 +244,8 @@ async def list_batches(
         
         return items
         
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -270,6 +267,8 @@ async def get_batch(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Batch not found"
             )
+        if current_user.get("role") == "mentor":
+            await ensure_mentor_cohort_access(db, current_user, str(batch.get("cohortId")))
         
         # Check access
         if current_user.get("role") == "mentor":
@@ -351,6 +350,8 @@ async def update_batch(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Batch not found"
             )
+        if current_user.get("role") == "mentor":
+            await ensure_mentor_cohort_access(db, current_user, str(batch.get("cohortId")))
         
         # Check ownership
         if str(batch["mentorId"]) != current_user["id"] and current_user.get("role") != "admin":
@@ -462,6 +463,8 @@ async def add_trainees_to_batch(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Batch not found"
             )
+        if current_user.get("role") == "mentor":
+            await ensure_mentor_cohort_access(db, current_user, str(batch.get("cohortId")))
         
         # Check ownership
         if str(batch["mentorId"]) != current_user["id"] and current_user.get("role") != "admin":
@@ -570,6 +573,8 @@ async def remove_trainees_from_batch(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Batch not found"
             )
+        if current_user.get("role") == "mentor":
+            await ensure_mentor_cohort_access(db, current_user, str(batch.get("cohortId")))
         
         # Check ownership
         if str(batch["mentorId"]) != current_user["id"] and current_user.get("role") != "admin":
@@ -617,6 +622,8 @@ async def delete_batch(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Batch not found"
             )
+        if current_user.get("role") == "mentor":
+            await ensure_mentor_cohort_access(db, current_user, str(batch.get("cohortId")))
         
         # Check ownership
         if str(batch["mentorId"]) != current_user["id"] and current_user.get("role") != "admin":
@@ -663,6 +670,8 @@ async def get_batch_analytics(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Batch not found"
             )
+        if current_user.get("role") == "mentor":
+            await ensure_mentor_cohort_access(db, current_user, str(batch.get("cohortId")))
         
         trainee_ids = batch.get("traineeIds", [])
         object_ids = []

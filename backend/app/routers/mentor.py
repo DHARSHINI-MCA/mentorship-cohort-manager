@@ -29,6 +29,9 @@ async def get_my_cohorts(
     mentor_ids = [str(profile["_id"]) for profile in mentor_profiles]
     cohorts = []
     for cohort_id in cohort_ids:
+        cohort_profile = next((item for item in mentor_profiles if cohort_id in [
+            str(value) for value in (item.get("cohortIds") or ([item.get("cohortId")] if item.get("cohortId") else [])) if value
+        ]), None)
         try:
             cohort = await db.cohorts.find_one({"_id": ObjectId(cohort_id)})
         except Exception:
@@ -51,6 +54,7 @@ async def get_my_cohorts(
                 "name": cohort.get("name", "Unnamed Cohort"),
                 "code": cohort.get("code") or (cid_str[:8].upper()),
                 "status": cohort.get("status", "active"),
+                "accessActive": (cohort_profile.get("cohortAccess") or {}).get(cid_str, True) if cohort_profile else False,
                 "startDate": cohort.get("startDate"),
                 "endDate": cohort.get("endDate"),
                 "traineeCount": trainee_count,
@@ -64,20 +68,24 @@ async def get_my_trainees(
     db: AsyncIOMotorDatabase = Depends(get_database),
     current_user: dict = Depends(require_mentor)
 ):
+    if not cohort_id:
+        raise HTTPException(status_code=400, detail="Select a cohort to view trainees", headers={"code": "COHORT_REQUIRED"})
     return await ProgressService.get_mentor_trainees(db, current_user, cohort_id=cohort_id)
 
 @router.get("/trainees/{trainee_id}")
 async def get_trainee_details(
     trainee_id: str,
+    cohort_id: Optional[str] = None,
     db: AsyncIOMotorDatabase = Depends(get_database),
     current_user: dict = Depends(require_any_authenticated)
 ):
-    return await ProgressService.get_trainee_details(db, trainee_id, current_user)
+    return await ProgressService.get_trainee_details(db, trainee_id, current_user, cohort_id=cohort_id)
 
 @router.patch("/trainees/{trainee_id}/dropout")
 async def mark_trainee_dropout(
     trainee_id: str,
     request: TraineeDropoutRequest,
+    cohort_id: Optional[str] = None,
     db: AsyncIOMotorDatabase = Depends(get_database),
     current_user: dict = Depends(require_mentor)
 ):
@@ -97,6 +105,10 @@ async def mark_trainee_dropout(
             mentor = None
     if not mentor or str(mentor.get("userId")) != str(current_user["id"]):
         raise HTTPException(status_code=403, detail="You are not authorized to update this trainee")
+    requested_cohort_id = str(cohort_id or trainee.get("cohortId"))
+    if requested_cohort_id != str(trainee.get("cohortId")):
+        raise HTTPException(status_code=403, detail="Trainee does not belong to the selected cohort")
+    await ProgressService.assert_mentor_cohort_access(db, current_user, requested_cohort_id)
 
     if trainee.get("status") == "dropped_out":
         return {"success": True, "traineeId": trainee_id, "status": "dropped_out"}
@@ -137,31 +149,34 @@ async def mark_trainee_dropout(
 async def update_trainee_progress(
     trainee_id: str,
     req: ProgressUpdateRequest,
+    cohort_id: Optional[str] = None,
     db: AsyncIOMotorDatabase = Depends(get_database),
     current_user: dict = Depends(require_any_authenticated)
 ):
-    return await ProgressService.update_progress(db, trainee_id, req, current_user)
+    return await ProgressService.update_progress(db, trainee_id, req, current_user, cohort_id=cohort_id)
 
 @router.patch("/trainees/{trainee_id}/talentnext/{course_id}")
 async def update_talentnext_course(
     trainee_id: str,
     course_id: str,
     req: dict,
+    cohort_id: Optional[str] = None,
     db: AsyncIOMotorDatabase = Depends(get_database),
     current_user: dict = Depends(require_any_authenticated)
 ):
     """Update TalentNext course completion status for a trainee"""
     completed = req.get("completed", False)
-    return await ProgressService.update_talentnext_progress(db, trainee_id, course_id, completed, current_user)
+    return await ProgressService.update_talentnext_progress(db, trainee_id, course_id, completed, current_user, cohort_id=cohort_id)
 
 @router.post("/trainees/{trainee_id}/feedback")
 async def submit_trainee_feedback(
     trainee_id: str,
     req: FeedbackSubmitRequest,
+    cohort_id: Optional[str] = None,
     db: AsyncIOMotorDatabase = Depends(get_database),
     current_user: dict = Depends(require_any_authenticated)
 ):
-    return await FeedbackService.submit_feedback(db, trainee_id, req, current_user)
+    return await FeedbackService.submit_feedback(db, trainee_id, req, current_user, cohort_id=cohort_id)
 
 @router.get("/cohort-plan")
 async def get_mentor_cohort_plan(
@@ -169,6 +184,8 @@ async def get_mentor_cohort_plan(
     db: AsyncIOMotorDatabase = Depends(get_database),
     current_user: dict = Depends(require_mentor)
 ):
+    if not cohortId:
+        raise HTTPException(status_code=400, detail="Select a cohort to view its training plan", headers={"code": "COHORT_REQUIRED"})
     if cohortId:
         if current_user.get("role") == "mentor":
             mentor_profile = await db.mentors.find_one({
@@ -187,6 +204,8 @@ async def get_mentor_cohort_plan(
                     detail="Account is deactivated",
                     headers={"code": "ACCOUNT_INACTIVE"}
                 )
+            if (mentor_profile.get("cohortAccess") or {}).get(str(cohortId), True) is False:
+                raise HTTPException(status_code=403, detail="Your access to this cohort is deactivated", headers={"code": "COHORT_ACCESS_INACTIVE"})
         cohort = await db.cohorts.find_one({"_id": ObjectId(cohortId)})
     else:
         # Find first mentor record for current_user

@@ -1,4 +1,5 @@
 import React, { useEffect, useMemo, useState } from 'react';
+import { Link, useSearchParams } from 'react-router-dom';
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { CalendarDays, Clock3, MapPin, Video, Users, ChevronDown } from 'lucide-react';
 import api from '../../api/client';
@@ -33,6 +34,12 @@ function formatDateShort(value) {
 }
 
 export default function SessionHistory() {
+  const [params] = useSearchParams();
+  const cohortId = params.get('cohortId');
+  const { data: cohorts = [] } = useQuery({
+    queryKey: ['mentorCohorts'], queryFn: async () => (await api.get('/mentor/cohorts')).data || [],
+  });
+  const selectedCohort = cohorts.find((cohort) => cohort.id === cohortId);
   const queryClient = useQueryClient();
   const { showToast } = useToast();
   const [statusFilter, setStatusFilter] = useState('all');
@@ -40,9 +47,9 @@ export default function SessionHistory() {
   const [attendanceStatuses, setAttendanceStatuses] = useState({});
 
   const { data: sessions = [], isLoading, isError } = useQuery({
-    queryKey: ['mentorSessionHistory'],
+    queryKey: ['mentorSessionHistory', cohortId],
     queryFn: async () => {
-      const response = await api.get('/sessions/?limit=100');
+      const response = await api.get('/sessions/', { params: { limit: 100, ...(cohortId ? { cohort_id: cohortId } : {}) } });
       return response.data || [];
     },
   });
@@ -95,12 +102,14 @@ export default function SessionHistory() {
   const scheduledCount = sessions.filter((session) => session.status === 'scheduled').length;
   const completedCount = sessions.filter((session) => session.status === 'completed').length;
 
+  if (!cohortId) return <main className="mx-auto max-w-6xl px-4 py-8"><p className="text-sm text-slate-600">Choose a cohort before opening its session history.</p><Link to="/mentor/dashboard" className="mt-3 inline-flex text-sm font-semibold text-emerald-700">Back to My Cohorts →</Link></main>;
+
   return (
     <main className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-4">
 
       {/* ── Page header ── */}
       <div className="flex items-center justify-between py-2 border-b border-slate-200 mb-0">
-        <span className="text-xs font-bold uppercase tracking-wider text-slate-500">Session History</span>
+        <div><span className="text-xs font-bold uppercase tracking-wider text-slate-500">Session History</span>{selectedCohort && <p className="mt-0.5 text-xs text-slate-400">{selectedCohort.name}</p>}</div>
         <p className="text-[11px] text-slate-400">Review scheduled and completed sessions across your batches.</p>
       </div>
 

@@ -6,6 +6,22 @@ from app.schemas.progress import ProgressUpdateRequest
 
 class ProgressService:
     @staticmethod
+    async def assert_mentor_cohort_access(db, user: dict, cohort_id: str) -> None:
+        """Verify the mentor profile grants access to the requested cohort."""
+        if user.get("role") != "mentor":
+            return
+        mentor_profile = await db.mentors.find_one({
+            "userId": user["id"],
+            "$or": [{"cohortIds": str(cohort_id)}, {"cohortId": str(cohort_id)}],
+        })
+        if not mentor_profile:
+            raise HTTPException(status_code=403, detail="You are not authorized to access this cohort", headers={"code": "FORBIDDEN"})
+        if (mentor_profile.get("cohortAccess") or {}).get(str(cohort_id), True) is False:
+            raise HTTPException(status_code=403, detail="Your access to this cohort is deactivated", headers={"code": "COHORT_ACCESS_INACTIVE"})
+        if not user.get("isActive", True) or not mentor_profile.get("isActive", True):
+            raise HTTPException(status_code=403, detail="Account is deactivated", headers={"code": "ACCOUNT_INACTIVE"})
+
+    @staticmethod
     async def get_mentor_record(db: AsyncIOMotorDatabase, user_id: str) -> dict:
         # A user can be linked to mentor records across cohorts
         mentor = await db.mentors.find_one({"userId": user_id})
@@ -21,22 +37,7 @@ class ProgressService:
     async def get_mentor_trainees(db: AsyncIOMotorDatabase, user: dict, cohort_id: str = None) -> list:
         # If cohort_id is provided, check mentor authorization
         if cohort_id and user.get("role") == "mentor":
-            mentor_profile = await db.mentors.find_one({
-                "$or": [{"cohortIds": cohort_id}, {"cohortId": cohort_id}],
-                "userId": user["id"]
-            })
-            if not mentor_profile:
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail="You are not authorized to access this cohort",
-                    headers={"code": "FORBIDDEN"}
-                )
-            if not user.get("isActive", True) or not mentor_profile.get("isActive", True):
-                raise HTTPException(
-                    status_code=status.HTTP_403_FORBIDDEN,
-                    detail="Account is deactivated",
-                    headers={"code": "ACCOUNT_INACTIVE"}
-                )
+            await ProgressService.assert_mentor_cohort_access(db, user, cohort_id)
 
         # Find mentor IDs associated with this user
         mentor_cursor = db.mentors.find({"userId": user["id"]})
@@ -57,10 +58,20 @@ class ProgressService:
 
             # Report the trainee's current group so the mentor UI can keep
             # members out of other batch pickers.
-            active_batch = await db.batches.find_one({
+            active_batch_query = {
                 "traineeIds": {"$in": [ObjectId(trainee_id), trainee_id]},
                 "status": {"$nin": ["completed", "archived"]},
-            }, {"_id": 1, "name": 1})
+            }
+            trainee_cohort_id = str(t.get("cohortId")) if t.get("cohortId") else None
+            if trainee_cohort_id:
+                try:
+                    trainee_cohort_ref = ObjectId(trainee_cohort_id)
+                except Exception:
+                    trainee_cohort_ref = trainee_cohort_id
+                active_batch_query["cohortId"] = {"$in": [trainee_cohort_ref, trainee_cohort_id]}
+            if user.get("role") == "mentor":
+                active_batch_query["mentorId"] = {"$in": [ObjectId(user["id"]), user["id"]]}
+            active_batch = await db.batches.find_one(active_batch_query, {"_id": 1, "name": 1})
             t["batchId"] = str(active_batch["_id"]) if active_batch else None
             t["batchName"] = active_batch.get("name") if active_batch else None
             
@@ -110,7 +121,7 @@ class ProgressService:
         return items
 
     @staticmethod
-    async def get_trainee_details(db: AsyncIOMotorDatabase, trainee_id: str, current_user: dict) -> dict:
+    async def get_trainee_details(db: AsyncIOMotorDatabase, trainee_id: str, current_user: dict, cohort_id: str = None) -> dict:
         try:
             trainee = await db.trainees.find_one({"_id": ObjectId(trainee_id)})
         except Exception:
@@ -125,12 +136,15 @@ class ProgressService:
         # Role verification for mentor
         if current_user.get("role") == "mentor":
             mentor = await db.mentors.find_one({"_id": ObjectId(trainee.get("mentorId"))}) if trainee.get("mentorId") else None
-            if not mentor or str(mentor.get("userId")) != str(current_user["id"]):
+            trainee_cohort_id = str(trainee.get("cohortId")) if trainee.get("cohortId") else None
+            requested_cohort_id = str(cohort_id) if cohort_id else trainee_cohort_id
+            if not mentor or str(mentor.get("userId")) != str(current_user["id"]) or trainee_cohort_id != requested_cohort_id:
                 raise HTTPException(
                     status_code=status.HTTP_403_FORBIDDEN,
                     detail="You are not authorized to view this trainee",
                     headers={"code": "FORBIDDEN"}
                 )
+            await ProgressService.assert_mentor_cohort_access(db, current_user, requested_cohort_id)
 
         trainee["id"] = str(trainee["_id"])
         trainee.pop("_id", None)
@@ -243,7 +257,8 @@ class ProgressService:
         db: AsyncIOMotorDatabase,
         trainee_id: str,
         update_req: ProgressUpdateRequest,
-        current_user: dict
+        current_user: dict,
+        cohort_id: str = None,
     ) -> dict:
         try:
             trainee = await db.trainees.find_one({"_id": ObjectId(trainee_id)})
@@ -271,6 +286,11 @@ class ProgressService:
                     detail="You are not authorized to update progress for this trainee",
                     headers={"code": "FORBIDDEN"}
                 )
+            trainee_cohort = str(trainee.get("cohortId")) if trainee.get("cohortId") else None
+            if cohort_id and str(cohort_id) != trainee_cohort:
+                raise HTTPException(status_code=403, detail="Trainee does not belong to the selected cohort")
+            await ProgressService.assert_mentor_cohort_access(db, current_user, cohort_id or trainee_cohort)
+            await ProgressService.assert_mentor_cohort_access(db, current_user, str(trainee.get("cohortId")))
 
         progress = await db.progress.find_one({"traineeId": trainee_id})
         if not progress:
@@ -335,7 +355,8 @@ class ProgressService:
         trainee_id: str,
         course_id: str,
         completed: bool,
-        current_user: dict
+        current_user: dict,
+        cohort_id: str = None,
     ) -> dict:
         """Update TalentNext course completion status for a trainee"""
         try:
@@ -364,6 +385,11 @@ class ProgressService:
                     detail="You are not authorized to update progress for this trainee",
                     headers={"code": "FORBIDDEN"}
                 )
+            trainee_cohort = str(trainee.get("cohortId")) if trainee.get("cohortId") else None
+            if cohort_id and str(cohort_id) != trainee_cohort:
+                raise HTTPException(status_code=403, detail="Trainee does not belong to the selected cohort")
+            await ProgressService.assert_mentor_cohort_access(db, current_user, cohort_id or trainee_cohort)
+            await ProgressService.assert_mentor_cohort_access(db, current_user, str(trainee.get("cohortId")))
 
         # Get or create TalentNext progress document
         talent_next_progress = await db.talentnextProgress.find_one({"traineeId": trainee_id})

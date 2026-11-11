@@ -7,7 +7,7 @@ from bson import ObjectId
 from datetime import datetime
 from typing import Optional
 from app.core.db import get_database
-from app.core.deps import require_roles
+from app.core.deps import require_roles, ensure_mentor_cohort_access
 from app.schemas.sessions import (
     SessionCreate, SessionUpdate, SessionResponse, SessionListItem,
     MarkAttendanceRequest, AttendanceReportItem,
@@ -77,6 +77,7 @@ async def create_session(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Access denied"
             )
+        await ensure_mentor_cohort_access(db, current_user, str(batch.get("cohortId")))
 
         roster = await get_batch_roster(db, batch.get("traineeIds", []), include_dropped_out=False)
         if not roster:
@@ -164,6 +165,8 @@ async def list_sessions(
     Mentors see only their sessions
     """
     try:
+        if current_user.get("role") == "mentor" and not cohort_id:
+            raise HTTPException(status_code=400, detail="Select a cohort to view sessions", headers={"code": "COHORT_REQUIRED"})
         query = {}
         
         # Role-based filtering
@@ -173,15 +176,7 @@ async def list_sessions(
         # Cohort filter
         if cohort_id:
             if current_user.get("role") == "mentor":
-                mentor_profile = await db.mentors.find_one({
-                    "$or": [{"cohortIds": cohort_id}, {"cohortId": cohort_id}],
-                    "userId": current_user["id"]
-                })
-                if not mentor_profile:
-                    raise HTTPException(
-                        status_code=status.HTTP_403_FORBIDDEN,
-                        detail="You don't have access to this cohort"
-                    )
+                await ensure_mentor_cohort_access(db, current_user, cohort_id)
             cohort_batches = await db.batches.find({
                 "cohortId": {"$in": [ObjectId(cohort_id), cohort_id]}
             }, {"_id": 1}).to_list(length=None)
@@ -243,6 +238,8 @@ async def list_sessions(
         
         return items
         
+    except HTTPException:
+        raise
     except Exception as e:
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
@@ -365,6 +362,8 @@ async def get_session(
         
         # Get batch and mentor info
         batch = await db.batches.find_one({"_id": session["batchId"]})
+        if batch:
+            await ensure_mentor_cohort_access(db, current_user, str(batch.get("cohortId")))
         mentor = await db.users.find_one({"_id": session["mentorId"]})
         roster = session.get("roster")
         if roster is None:
@@ -448,6 +447,9 @@ async def update_session(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Access denied"
             )
+        batch = await db.batches.find_one({"_id": session["batchId"]})
+        if batch:
+            await ensure_mentor_cohort_access(db, current_user, str(batch.get("cohortId")))
         
         # Prevent updating completed sessions
         if session.get("status") in ["completed", "cancelled"]:
@@ -518,6 +520,8 @@ async def mark_attendance(
             )
 
         batch = await db.batches.find_one({"_id": session["batchId"]})
+        if batch:
+            await ensure_mentor_cohort_access(db, current_user, str(batch.get("cohortId")))
         roster = session.get("roster")
         if roster is None:
             roster = await get_batch_roster(db, batch.get("traineeIds", []) if batch else [])
@@ -595,6 +599,7 @@ async def get_attendance_report(
                     status_code=status.HTTP_403_FORBIDDEN,
                     detail="Access denied"
                 )
+        await ensure_mentor_cohort_access(db, current_user, str(batch.get("cohortId")))
         
         # Get all sessions for batch
         sessions = await db.sessions.find({"batchId": ObjectId(batch_id)}).to_list(length=None)
@@ -662,13 +667,15 @@ async def delete_session(
                 status_code=status.HTTP_404_NOT_FOUND,
                 detail="Session not found"
             )
-        
         # Check ownership
         if str(session["mentorId"]) != current_user["id"] and current_user.get("role") != "admin":
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Access denied"
             )
+        batch = await db.batches.find_one({"_id": session["batchId"]})
+        if batch:
+            await ensure_mentor_cohort_access(db, current_user, str(batch.get("cohortId")))
         
         # Only allow deleting scheduled sessions
         if session.get("status") != SessionStatus.SCHEDULED:
