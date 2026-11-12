@@ -56,6 +56,7 @@ export default function BatchManagement() {
     data: assignedTrainees = [],
     isLoading: traineesLoading,
     isError: traineesError,
+    error: traineesQueryError,
   } = useQuery({
     queryKey: ['mentorAssignedTraineesForBatches', cohortId],
     queryFn: async () => {
@@ -107,6 +108,8 @@ export default function BatchManagement() {
     },
   });
   const selectedCohort = availableCohorts.find((cohort) => String(cohort.id) === String(cohortId));
+  const cohortAccessDeactivated = selectedCohort?.accessActive === false
+    || traineesQueryError?.response?.data?.code === 'COHORT_ACCESS_INACTIVE';
 
   const {
     data: batchDetails,
@@ -172,12 +175,16 @@ export default function BatchManagement() {
         const res = await api.get(`/batches/?${params}`);
         return requireArrayResponse(res.data, 'batches');
       } catch (error) {
-        showToast('Failed to load batches', 'error');
+        if (error.response?.data?.code !== 'COHORT_ACCESS_INACTIVE') {
+          showToast('Failed to load batches', 'error');
+        }
         throw error;
       }
     },
     enabled: !!cohortId,
   });
+  const hasCohortAccessError = cohortAccessDeactivated
+    || batchesQueryError?.response?.data?.code === 'COHORT_ACCESS_INACTIVE';
 
   // Create batch mutation
   const createMutation = useMutation({
@@ -388,7 +395,9 @@ export default function BatchManagement() {
             >
               <option value="">Choose a cohort...</option>
               {availableCohorts.map((cohort) => (
-                <option key={cohort.id} value={cohort.id}>{cohort.name}</option>
+                <option key={cohort.id} value={cohort.id}>
+                  {cohort.name}{cohort.accessActive === false ? ' — Access deactivated' : ''}
+                </option>
               ))}
             </select>
           </div>
@@ -401,18 +410,31 @@ export default function BatchManagement() {
 
       {cohortId && (
         <>
-          {/* Controls */}
-          <div className="batch-controls">
-            <button
-              className="btn btn-primary"
-              onClick={() => setShowCreateModal(true)}
-            >
-              + Create Batch
-            </button>
-          </div>
+          {hasCohortAccessError ? (
+            <Card>
+              <div className="empty-state" role="status">
+                <p className="font-semibold text-rose-700">Cohort access deactivated</p>
+                <p className="mt-2 text-sm text-slate-600">
+                  The administrator has deactivated your access to {selectedCohort?.name || 'this cohort'}.
+                  You can no longer view its trainees, batches, or create new batches. Contact the administrator if you need access restored.
+                </p>
+                <Link to="/mentor/dashboard" className="btn btn-secondary mt-4 inline-flex">Back to My Cohorts</Link>
+              </div>
+            </Card>
+          ) : (
+            <>
+              {/* Controls */}
+              <div className="batch-controls">
+                <button
+                  className="btn btn-primary"
+                  onClick={() => setShowCreateModal(true)}
+                >
+                  + Create Batch
+                </button>
+              </div>
 
-          {/* Batches List */}
-          {isLoading ? (
+              {/* Batches List */}
+              {isLoading ? (
             <Card>
               <p className="loading-text">Loading batches...</p>
             </Card>
@@ -458,6 +480,8 @@ export default function BatchManagement() {
                 </tbody>
               </table>
             </div>
+              )}
+            </>
           )}
         </>
       )}
