@@ -814,16 +814,6 @@ export function CohortsList() {
                   </div>
                 </div>
               )}
-
-              <TalentNextCourseSelector
-                catalog={talentnextCourses || []}
-                assignments={selectedTalentNextCourses}
-                onChange={(next) => {
-                  setSelectedTalentNextCourses(next);
-                  setCustomPlan((prev) => ({ ...prev, talentnextCourses: next }));
-                }}
-                subtitle="Selected TalentNext courses are assigned to this cohort when created."
-              />
             </div>
           )}
 

@@ -19,7 +19,15 @@ async def close_mongo_connection():
 
 async def _ensure_unique_trainee_employee_id_index(db: AsyncIOMotorDatabase) -> None:
     """Trim trainee employeeIds, safely disambiguate any legacy duplicates, and create unique CI index."""
+    existing_indexes = await db.trainees.index_information()
+    for idx_name, idx_info in existing_indexes.items():
+        if idx_name != "uniq_trainee_employee_id_ci" and idx_info.get("key") == [("employeeId", 1)]:
+            await db.trainees.drop_index(idx_name)
+
     seen_keys: set[str] = set()
+    dup_updates: list[tuple[object, dict]] = []
+    trim_updates: list[tuple[object, str]] = []
+
     cursor = db.trainees.find(
         {"employeeId": {"$type": "string"}},
         {"_id": 1, "employeeId": 1, "createdAt": 1, "legacyDuplicateEmployeeId": 1},
@@ -30,7 +38,7 @@ async def _ensure_unique_trainee_employee_id_index(db: AsyncIOMotorDatabase) -> 
         trimmed = raw_val.strip()
         if not trimmed:
             if raw_val != "":
-                await db.trainees.update_one({"_id": doc["_id"]}, {"$set": {"employeeId": ""}})
+                dup_updates.append((doc["_id"], {"employeeId": ""}))
             continue
 
         key = trimmed.casefold()
@@ -39,12 +47,18 @@ async def _ensure_unique_trainee_employee_id_index(db: AsyncIOMotorDatabase) -> 
             update_fields = {"employeeId": disambiguated}
             if not doc.get("legacyDuplicateEmployeeId"):
                 update_fields["legacyDuplicateEmployeeId"] = trimmed
-            await db.trainees.update_one({"_id": doc["_id"]}, {"$set": update_fields})
+            dup_updates.append((doc["_id"], update_fields))
             seen_keys.add(disambiguated.casefold())
         else:
             seen_keys.add(key)
             if trimmed != raw_val:
-                await db.trainees.update_one({"_id": doc["_id"]}, {"$set": {"employeeId": trimmed}})
+                trim_updates.append((doc["_id"], trimmed))
+
+    # Disambiguate duplicates first so trimming the primary record never collides.
+    for doc_id, update_fields in dup_updates:
+        await db.trainees.update_one({"_id": doc_id}, {"$set": update_fields})
+    for doc_id, trimmed in trim_updates:
+        await db.trainees.update_one({"_id": doc_id}, {"$set": {"employeeId": trimmed}})
 
     await db.trainees.create_index(
         [("employeeId", pymongo.ASCENDING)],
