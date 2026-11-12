@@ -100,7 +100,7 @@ export function Navbar() {
                         : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
                     }`}
                   >
-                    My Trainees
+                    My Cohorts
                   </Link>
                   <Link
                     to={`/mentor/plan${mentorContext}`}

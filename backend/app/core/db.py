@@ -17,12 +17,52 @@ async def close_mongo_connection():
     if db_instance.client:
         db_instance.client.close()
 
+async def _ensure_unique_trainee_employee_id_index(db: AsyncIOMotorDatabase) -> None:
+    """Trim trainee employeeIds, safely disambiguate any legacy duplicates, and create unique CI index."""
+    seen_keys: set[str] = set()
+    cursor = db.trainees.find(
+        {"employeeId": {"$type": "string"}},
+        {"_id": 1, "employeeId": 1, "createdAt": 1, "legacyDuplicateEmployeeId": 1},
+    ).sort([("createdAt", pymongo.ASCENDING), ("_id", pymongo.ASCENDING)])
+
+    async for doc in cursor:
+        raw_val = doc.get("employeeId") or ""
+        trimmed = raw_val.strip()
+        if not trimmed:
+            if raw_val != "":
+                await db.trainees.update_one({"_id": doc["_id"]}, {"$set": {"employeeId": ""}})
+            continue
+
+        key = trimmed.casefold()
+        if key in seen_keys:
+            disambiguated = f"{trimmed}__DUP_{str(doc['_id'])[-6:]}"
+            update_fields = {"employeeId": disambiguated}
+            if not doc.get("legacyDuplicateEmployeeId"):
+                update_fields["legacyDuplicateEmployeeId"] = trimmed
+            await db.trainees.update_one({"_id": doc["_id"]}, {"$set": update_fields})
+            seen_keys.add(disambiguated.casefold())
+        else:
+            seen_keys.add(key)
+            if trimmed != raw_val:
+                await db.trainees.update_one({"_id": doc["_id"]}, {"$set": {"employeeId": trimmed}})
+
+    await db.trainees.create_index(
+        [("employeeId", pymongo.ASCENDING)],
+        unique=True,
+        name="uniq_trainee_employee_id_ci",
+        collation=pymongo.collation.Collation(locale="en", strength=2),
+        partialFilterExpression={"employeeId": {"$type": "string", "$gt": ""}},
+    )
+
+
 async def init_indexes():
     db = db_instance.db
     if db is None:
         return
     # Users email unique index
     await db.users.create_index([("email", pymongo.ASCENDING)], unique=True)
+
+    await _ensure_unique_trainee_employee_id_index(db)
 
     # Cross-role identity claims enforce one email and employee ID per person.
     await db.personIdentityClaims.create_index([("claim", pymongo.ASCENDING)], unique=True)
@@ -56,7 +96,13 @@ async def init_indexes():
     await db.batches.create_index([("traineeIds", pymongo.ASCENDING)])
     
     # Mentors and trainees indexes for location/timezone filtering
-    await db.mentors.create_index([("cohortId", pymongo.ASCENDING), ("email", pymongo.ASCENDING)])
+    await db.mentors.create_index(
+    [
+        ("cohortId", pymongo.ASCENDING),
+        ("email", pymongo.ASCENDING)
+    ],
+    unique=True
+)
     await db.mentors.create_index([("cohortIds", pymongo.ASCENDING)])
     await db.mentors.create_index([("userId", pymongo.ASCENDING)])
     await db.trainees.create_index([("cohortId", pymongo.ASCENDING), ("email", pymongo.ASCENDING)])
