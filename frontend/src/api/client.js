@@ -13,6 +13,15 @@ api.interceptors.request.use(
     if (token) {
       config.headers.Authorization = `Bearer ${token}`;
     }
+    // Session and batch lists contain user-specific, fast-changing data. Avoid
+    // stale browser/proxy 304 responses leaving Axios with an empty payload.
+    const method = (config.method || 'get').toLowerCase();
+    const url = config.url || '';
+    if (method === 'get' && /\/(batches|sessions)(\/|\?|$)/i.test(url)) {
+      config.params = { ...(config.params || {}), _fresh: Date.now() };
+      config.headers['Cache-Control'] = 'no-cache, no-store, max-age=0';
+      config.headers.Pragma = 'no-cache';
+    }
     return config;
   },
   (error) => Promise.reject(error)

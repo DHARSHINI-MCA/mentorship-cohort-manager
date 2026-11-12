@@ -1,19 +1,23 @@
-/** Return an array from either a plain-list or common paginated API response. */
-export function unwrapArrayResponse(payload, resourceKey) {
+/** Return a list from a plain response or common nested/paginated API envelope. */
+export function unwrapArrayResponse(payload, resourceKey, depth = 0) {
   if (Array.isArray(payload)) return payload;
-  if (!payload || typeof payload !== 'object') return null;
+  if (!payload || typeof payload !== 'object' || depth > 3) return null;
 
   const candidates = [
     payload[resourceKey],
     payload.items,
     payload.results,
+    payload.records,
+    payload.docs,
     payload.data,
-    payload.data?.[resourceKey],
-    payload.data?.items,
-    payload.data?.results,
   ];
 
-  return candidates.find(Array.isArray) || null;
+  for (const candidate of candidates) {
+    if (Array.isArray(candidate)) return candidate;
+    const nested = unwrapArrayResponse(candidate, resourceKey, depth + 1);
+    if (nested) return nested;
+  }
+  return null;
 }
 
 export function requireArrayResponse(payload, resourceKey) {
