@@ -7,8 +7,6 @@ import { GraduationCap, LogOut } from 'lucide-react';
 export function Navbar() {
   const { user, role, logout } = useAuth();
   const location = useLocation();
-  const mentorCohort = role === 'mentor' ? new URLSearchParams(location.search).get('cohortId') : null;
-  const mentorContext = mentorCohort ? `?cohortId=${encodeURIComponent(mentorCohort)}` : '';
 
   const isActive = (path) => location.pathname === path || location.pathname.startsWith(`${path}/`);
 
@@ -91,48 +89,16 @@ export function Navbar() {
               )}
 
               {role === 'mentor' && (
-                <>
-                  <Link
-                    to={`/mentor/dashboard${mentorContext}`}
-                    className={`px-3.5 py-2 rounded-xl text-sm font-semibold transition-all ${
-                      isActive('/mentor/dashboard')
-                        ? 'bg-slate-100 text-slate-900'
-                        : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
-                    }`}
-                  >
-                    My Cohorts
-                  </Link>
-                  <Link
-                    to={`/mentor/plan${mentorContext}`}
-                    className={`px-3.5 py-2 rounded-xl text-sm font-semibold transition-all ${
-                      isActive('/mentor/plan')
-                        ? 'bg-slate-100 text-slate-900'
-                        : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
-                    }`}
-                  >
-                    Allocated Training Plan
-                  </Link>
-                  <Link
-                    to={`/mentor/batches${mentorContext}`}
-                    className={`px-3.5 py-2 rounded-xl text-sm font-semibold transition-all ${
-                      isActive('/mentor/batches')
-                        ? 'bg-slate-100 text-slate-900'
-                        : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
-                    }`}
-                  >
-                    My Batches
-                  </Link>
-                  <Link
-                    to={`/mentor/sessions${mentorContext}`}
-                    className={`px-3.5 py-2 rounded-xl text-sm font-semibold transition-all ${
-                      isActive('/mentor/sessions')
-                        ? 'bg-slate-100 text-slate-900'
-                        : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
-                    }`}
-                  >
-                    Session History
-                  </Link>
-                </>
+                <Link
+                  to="/mentor/dashboard"
+                  className={`px-3.5 py-2 rounded-xl text-sm font-semibold transition-all ${
+                    isActive('/mentor/dashboard')
+                      ? 'bg-slate-100 text-slate-900'
+                      : 'text-slate-600 hover:text-slate-900 hover:bg-slate-50'
+                  }`}
+                >
+                  My Cohorts
+                </Link>
               )}
 
               {role === 'nominator' && (
