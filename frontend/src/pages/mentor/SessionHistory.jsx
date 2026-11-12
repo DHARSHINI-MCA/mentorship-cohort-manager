@@ -6,6 +6,7 @@ import api from '../../api/client';
 import { Modal } from '../../components/Modal';
 import { DataTable, PersonCell } from '../../components/DataTable';
 import { useToast } from '../../context/ToastContext';
+import { requireArrayResponse, unwrapArrayResponse } from '../../utils/arrayResponse';
 
 const statusStyles = {
   scheduled: 'bg-blue-50 text-blue-700 border-blue-200',
@@ -36,9 +37,10 @@ function formatDateShort(value) {
 export default function SessionHistory() {
   const [params, setParams] = useSearchParams();
   const cohortId = params.get('cohortId');
-  const { data: cohorts = [] } = useQuery({
-    queryKey: ['mentorCohorts'], queryFn: async () => (await api.get('/mentor/cohorts')).data || [],
+  const { data: cohortResponse = [] } = useQuery({
+    queryKey: ['mentorCohorts'], queryFn: async () => requireArrayResponse((await api.get('/mentor/cohorts')).data, 'cohorts'),
   });
+  const cohorts = unwrapArrayResponse(cohortResponse, 'cohorts') || [];
   const selectedCohort = cohorts.find((cohort) => cohort.id === cohortId);
   const queryClient = useQueryClient();
   const { showToast } = useToast();
@@ -50,7 +52,7 @@ export default function SessionHistory() {
     queryKey: ['mentorSessionHistory', cohortId],
     queryFn: async () => {
       const response = await api.get('/sessions/', { params: { limit: 100, ...(cohortId ? { cohort_id: cohortId } : {}) } });
-      return response.data || [];
+      return requireArrayResponse(response.data, 'sessions');
     },
   });
 
