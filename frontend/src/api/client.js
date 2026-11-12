@@ -1,7 +1,14 @@
 import axios from 'axios';
 
+const localHosts = new Set(['localhost', '127.0.0.1']);
+const isLocalDevelopment = localHosts.has(window.location.hostname);
+const configuredApiBaseUrl = import.meta.env.VITE_API_BASE_URL;
+const apiBaseURL = configuredApiBaseUrl || (isLocalDevelopment
+  ? '/api'
+  : 'https://mentorship-cohort-manager-backend.onrender.com/api');
+
 const api = axios.create({
-  baseURL: '/api',
+  baseURL: apiBaseURL,
   headers: {
     'Content-Type': 'application/json',
   },
