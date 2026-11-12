@@ -82,14 +82,26 @@ async def ensure_mentor_cohort_access(db: AsyncIOMotorDatabase, current_user: di
     """Authorize a mentor within one cohort; global account status is checked by get_current_user."""
     if current_user.get("role") != "mentor":
         return None
+    cohort_id = str(cohort_id)
+    cohort_refs = [cohort_id]
+    try:
+        cohort_refs.append(ObjectId(cohort_id))
+    except Exception:
+        pass
     mentor = await db.mentors.find_one({
         "userId": current_user["id"],
-        "$or": [{"cohortIds": str(cohort_id)}, {"cohortId": str(cohort_id)}],
+        # Older and newer records may store cohort references as either a
+        # string or BSON ObjectId. Match both so authorization agrees with
+        # the mentor cohort selector.
+        "$or": [
+            {"cohortIds": {"$in": cohort_refs}},
+            {"cohortId": {"$in": cohort_refs}},
+        ],
     })
     if not mentor:
         raise HTTPException(status_code=403, detail="You are not authorized to access this cohort", headers={"code": "FORBIDDEN"})
     cohort_access = mentor.get("cohortAccess") or {}
-    if cohort_access.get(str(cohort_id), True) is False:
+    if cohort_access.get(cohort_id, True) is False:
         raise HTTPException(status_code=403, detail="Your access to this cohort is deactivated", headers={"code": "COHORT_ACCESS_INACTIVE"})
     if mentor.get("isActive", True) is False:
         raise HTTPException(status_code=403, detail="Account is deactivated", headers={"code": "ACCOUNT_INACTIVE"})

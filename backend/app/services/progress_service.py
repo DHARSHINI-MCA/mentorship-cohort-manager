@@ -3,23 +3,13 @@ from bson import ObjectId
 from fastapi import HTTPException, status
 from motor.motor_asyncio import AsyncIOMotorDatabase
 from app.schemas.progress import ProgressUpdateRequest
+from app.core.deps import ensure_mentor_cohort_access
 
 class ProgressService:
     @staticmethod
     async def assert_mentor_cohort_access(db, user: dict, cohort_id: str) -> None:
         """Verify the mentor profile grants access to the requested cohort."""
-        if user.get("role") != "mentor":
-            return
-        mentor_profile = await db.mentors.find_one({
-            "userId": user["id"],
-            "$or": [{"cohortIds": str(cohort_id)}, {"cohortId": str(cohort_id)}],
-        })
-        if not mentor_profile:
-            raise HTTPException(status_code=403, detail="You are not authorized to access this cohort", headers={"code": "FORBIDDEN"})
-        if (mentor_profile.get("cohortAccess") or {}).get(str(cohort_id), True) is False:
-            raise HTTPException(status_code=403, detail="Your access to this cohort is deactivated", headers={"code": "COHORT_ACCESS_INACTIVE"})
-        if not user.get("isActive", True) or not mentor_profile.get("isActive", True):
-            raise HTTPException(status_code=403, detail="Account is deactivated", headers={"code": "ACCOUNT_INACTIVE"})
+        await ensure_mentor_cohort_access(db, user, str(cohort_id))
 
     @staticmethod
     async def get_mentor_record(db: AsyncIOMotorDatabase, user_id: str) -> dict:
@@ -41,13 +31,21 @@ class ProgressService:
 
         # Find mentor IDs associated with this user
         mentor_cursor = db.mentors.find({"userId": user["id"]})
-        mentor_ids = [str(m["_id"]) async for m in mentor_cursor]
+        mentor_ids = []
+        async for mentor in mentor_cursor:
+            mentor_ids.append(str(mentor["_id"]))
+            mentor_ids.append(mentor["_id"])
         if not mentor_ids:
             return []
 
         query = {"mentorId": {"$in": mentor_ids}}
         if cohort_id:
-            query["cohortId"] = cohort_id
+            cohort_refs = [str(cohort_id)]
+            try:
+                cohort_refs.append(ObjectId(str(cohort_id)))
+            except Exception:
+                pass
+            query["cohortId"] = {"$in": cohort_refs}
 
         # Find trainees assigned to any of these mentor records
         trainees_cursor = db.trainees.find(query).sort("name", 1)
