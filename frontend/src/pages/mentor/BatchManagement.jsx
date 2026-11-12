@@ -7,6 +7,7 @@ import { Card } from '../../components/Card';
 import { Modal } from '../../components/Modal';
 import { DataTable, PersonCell } from '../../components/DataTable';
 import { ArrowLeft } from 'lucide-react';
+import { requireArrayResponse } from '../../utils/arrayResponse';
 import '../../styles/BatchManagement.css';
 
 const MISSING_LOCATION = '__missing_location__';
@@ -59,7 +60,7 @@ export default function BatchManagement() {
     queryKey: ['mentorAssignedTraineesForBatches', cohortId],
     queryFn: async () => {
       const res = await api.get('/mentor/trainees', { params: cohortId ? { cohort_id: cohortId } : {} });
-      return res.data || [];
+      return requireArrayResponse(res.data, 'trainees');
     },
     enabled: !!cohortId,
   });
@@ -68,7 +69,7 @@ export default function BatchManagement() {
     queryKey: ['batchSessions', selectedBatch?.id],
     queryFn: async () => {
       const res = await api.get(`/sessions/?batch_id=${selectedBatch.id}&limit=100`);
-      return res.data || [];
+      return requireArrayResponse(res.data, 'sessions');
     },
     enabled: showDetailModal && !!selectedBatch?.id,
   });
@@ -102,7 +103,7 @@ export default function BatchManagement() {
     queryKey: ['mentorAssignedCohortsForBatches'],
     queryFn: async () => {
       const res = await api.get('/mentor/cohorts');
-      return res.data || [];
+      return requireArrayResponse(res.data, 'cohorts');
     },
   });
   const selectedCohort = availableCohorts.find((cohort) => String(cohort.id) === String(cohortId));
@@ -159,7 +160,7 @@ export default function BatchManagement() {
   const addableFilteredTrainees = filteredUnbatchedTrainees.filter((trainee) => !batchTraineeIds.has(trainee.id));
 
   // Fetch batches
-  const { data: batches, isLoading } = useQuery({
+  const { data: batches = [], isLoading, isError: batchesError, error: batchesQueryError, refetch: refetchBatches } = useQuery({
     queryKey: ['mentorBatches', cohortId],
     queryFn: async () => {
       if (!cohortId) return [];
@@ -169,10 +170,10 @@ export default function BatchManagement() {
         // the query string so the browser does not need to follow a redirect
         // for this authenticated request.
         const res = await api.get(`/batches/?${params}`);
-        return res.data;
+        return requireArrayResponse(res.data, 'batches');
       } catch (error) {
         showToast('Failed to load batches', 'error');
-        return [];
+        throw error;
       }
     },
     enabled: !!cohortId,
@@ -414,6 +415,13 @@ export default function BatchManagement() {
           {isLoading ? (
             <Card>
               <p className="loading-text">Loading batches...</p>
+            </Card>
+          ) : batchesError ? (
+            <Card>
+              <div className="empty-state">
+                <p>{batchesQueryError?.response?.data?.detail || 'Could not load batches.'}</p>
+                <button className="btn btn-secondary mt-3" onClick={() => refetchBatches()}>Retry</button>
+              </div>
             </Card>
           ) : !batches || batches.length === 0 ? (
             <Card>

@@ -48,7 +48,7 @@ export default function SessionHistory() {
   const [expandedSessionId, setExpandedSessionId] = useState(null);
   const [attendanceStatuses, setAttendanceStatuses] = useState({});
 
-  const { data: sessions = [], isLoading, isError } = useQuery({
+  const { data: sessions = [], isLoading, isError, error: sessionsError, refetch: refetchSessions } = useQuery({
     queryKey: ['mentorSessionHistory', cohortId],
     queryFn: async () => {
       const response = await api.get('/sessions/', { params: { limit: 100, ...(cohortId ? { cohort_id: cohortId } : {}) } });
@@ -180,7 +180,16 @@ export default function SessionHistory() {
             {[1, 2, 3].map((row) => <div key={row} className="h-10 animate-pulse bg-slate-50" />)}
           </div>
         ) : isError ? (
-          <div className="py-4 px-4 text-xs text-rose-600">Could not load session history. Please try again.</div>
+          <div className="flex flex-wrap items-center justify-between gap-3 border-b border-rose-100 bg-rose-50 px-4 py-3 text-xs text-rose-700">
+            <span>{sessionsError?.response?.data?.detail || sessionsError?.message || 'Could not load session history.'}</span>
+            <button
+              type="button"
+              onClick={() => refetchSessions()}
+              className="rounded-md border border-rose-200 bg-white px-3 py-1.5 font-semibold text-rose-700 hover:bg-rose-100"
+            >
+              Retry
+            </button>
+          </div>
         ) : filteredSessions.length === 0 ? (
           <div className="py-8 text-center">
             <CalendarDays className="w-8 h-8 text-slate-300 mx-auto mb-2" />
