@@ -1,4 +1,4 @@
-from pydantic import BaseModel
+from pydantic import BaseModel, model_validator
 from typing import Optional, List
 from datetime import datetime
 from enum import Enum
@@ -21,6 +21,17 @@ class CohortBase(BaseModel):
     endDate: str
     talentnextCourses: List[TalentNextCourseAssignment] = []
 
+    @model_validator(mode="after")
+    def validate_timeline(self):
+        try:
+            start = datetime.strptime(self.startDate, "%Y-%m-%d").date()
+            end = datetime.strptime(self.endDate, "%Y-%m-%d").date()
+        except (TypeError, ValueError) as exc:
+            raise ValueError("Cohort dates must use YYYY-MM-DD format") from exc
+        if end < start:
+            raise ValueError("Cohort end date must be on or after the start date")
+        return self
+
 class CohortCreate(CohortBase):
     trainingTemplateId: Optional[str] = None
     feedbackTemplateId: Optional[str] = None
@@ -35,6 +46,19 @@ class CohortUpdate(BaseModel):
     endDate: Optional[str] = None
     talentnextCourses: Optional[List[TalentNextCourseAssignment]] = None
     totalWeeks: Optional[int] = None
+
+    @model_validator(mode="after")
+    def validate_timeline(self):
+        if self.startDate is None or self.endDate is None:
+            return self
+        try:
+            start = datetime.strptime(self.startDate, "%Y-%m-%d").date()
+            end = datetime.strptime(self.endDate, "%Y-%m-%d").date()
+        except (TypeError, ValueError) as exc:
+            raise ValueError("Cohort dates must use YYYY-MM-DD format") from exc
+        if end < start:
+            raise ValueError("Cohort end date must be on or after the start date")
+        return self
 
 class CohortStatusUpdate(BaseModel):
     status: CohortStatus

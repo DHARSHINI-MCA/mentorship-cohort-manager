@@ -1,7 +1,7 @@
 """
 Schemas for session management and attendance tracking
 """
-from pydantic import BaseModel, EmailStr
+from pydantic import BaseModel, EmailStr, model_validator
 from typing import Optional, List
 from datetime import datetime
 from enum import Enum
@@ -35,6 +35,19 @@ class SessionCreate(BaseModel):
     location: Optional[str] = None  # Physical location if in-person
     meetingLink: Optional[str] = None  # Video conferencing URL if online
     maxAttendees: Optional[int] = None  # Capacity limit
+
+    @model_validator(mode="after")
+    def validate_schedule(self):
+        try:
+            start = datetime.strptime(self.startTime, "%H:%M").time()
+            end = datetime.strptime(self.endTime, "%H:%M").time()
+        except (TypeError, ValueError) as exc:
+            raise ValueError("Session times must use HH:MM format") from exc
+        if end <= start:
+            raise ValueError("Session end time must be later than its start time")
+        if not self.title.strip():
+            raise ValueError("Session title is required")
+        return self
 
 
 class SessionUpdate(BaseModel):

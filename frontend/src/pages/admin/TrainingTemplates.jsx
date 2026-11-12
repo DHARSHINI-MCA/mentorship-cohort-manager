@@ -15,6 +15,8 @@ export function TrainingTemplates() {
   const [isPreviewOpen, setIsPreviewOpen] = useState(false);
   const [previewTemplate, setPreviewTemplate] = useState(null);
   const [isEditingTemplate, setIsEditingTemplate] = useState(false);
+  const [showAddTalentNextCourse, setShowAddTalentNextCourse] = useState(false);
+  const [newTalentNextCourseName, setNewTalentNextCourseName] = useState('');
 
   // Builder State
   const [name, setName] = useState('');
@@ -43,6 +45,18 @@ export function TrainingTemplates() {
   const { data: talentNextCatalog = [] } = useQuery({
     queryKey: ['talentnextCoursesList'],
     queryFn: async () => (await api.get('/talentnext-courses')).data || [],
+  });
+
+  const createTalentNextCourseMutation = useMutation({
+    mutationFn: async (courseName) => (await api.post('/talentnext-courses', { name: courseName })).data,
+    onSuccess: (course) => {
+      queryClient.setQueryData(['talentnextCoursesList'], (current = []) => [
+        ...current.filter((item) => item.id !== course.id),
+        course,
+      ]);
+      queryClient.invalidateQueries({ queryKey: ['talentnextCoursesList'] });
+    },
+    onError: (err) => showToast(err.response?.data?.detail || 'Could not add TalentNext course', 'error'),
   });
 
   const createMutation = useMutation({
@@ -176,10 +190,64 @@ export function TrainingTemplates() {
 
   const renderTalentNextEditor = (assignments, onChange) => (
     <section className="space-y-2 rounded-xl border border-amber-200 bg-amber-50/60 p-4">
-      <div>
-        <h3 className="text-xs font-bold uppercase tracking-wider text-slate-700">TalentNext courses</h3>
-        <p className="mt-1 text-xs text-slate-500">Selected courses are included when this training plan is applied to a cohort.</p>
+      <div className="flex flex-wrap items-start justify-between gap-2">
+        <div>
+          <h3 className="text-xs font-bold uppercase tracking-wider text-slate-700">TalentNext courses</h3>
+          <p className="mt-1 text-xs text-slate-500">Selected courses are included when this training plan is applied to a cohort.</p>
+        </div>
+        <button
+          type="button"
+          onClick={() => {
+            setShowAddTalentNextCourse((shown) => !shown);
+            setNewTalentNextCourseName('');
+          }}
+          className="inline-flex items-center gap-1 rounded-lg border border-amber-300 bg-white px-2.5 py-1.5 text-xs font-bold text-amber-800 hover:bg-amber-100"
+        >
+          <Plus className="h-3.5 w-3.5" /> Add TalentNext course
+        </button>
       </div>
+      {showAddTalentNextCourse && (
+        <div className="flex flex-wrap items-center gap-2 rounded-lg border border-amber-200 bg-white p-2.5">
+          <input
+            type="text"
+            value={newTalentNextCourseName}
+            onChange={(event) => setNewTalentNextCourseName(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === 'Enter') {
+                event.preventDefault();
+                event.currentTarget.closest('div')?.querySelector('[data-create-talentnext]')?.click();
+              }
+            }}
+            placeholder="Course name"
+            aria-label="New TalentNext course name"
+            className="min-w-48 flex-1 rounded-lg border border-slate-200 px-3 py-2 text-xs outline-none focus:border-amber-400 focus:ring-2 focus:ring-amber-100"
+          />
+          <button
+            type="button"
+            data-create-talentnext
+            disabled={!newTalentNextCourseName.trim() || createTalentNextCourseMutation.isPending}
+            onClick={async () => {
+              const courseName = newTalentNextCourseName.trim();
+              if (!courseName) return;
+              const existing = talentNextCatalog.find((course) => course.name.trim().toLocaleLowerCase() === courseName.toLocaleLowerCase());
+              try {
+                const course = existing || await createTalentNextCourseMutation.mutateAsync(courseName);
+                if (!assignments.some((item) => item.courseId === course.id)) {
+                  onChange([...assignments, { courseId: course.id, isMandatory: true }]);
+                }
+                setNewTalentNextCourseName('');
+                setShowAddTalentNextCourse(false);
+                showToast(existing ? 'Existing TalentNext course added to this template' : 'TalentNext course created and added to this template');
+              } catch {
+                // The mutation displays the API error in a toast.
+              }
+            }}
+            className="rounded-lg bg-amber-700 px-3 py-2 text-xs font-bold text-white hover:bg-amber-800 disabled:cursor-not-allowed disabled:opacity-50"
+          >
+            {createTalentNextCourseMutation.isPending ? 'Adding…' : 'Add to template'}
+          </button>
+        </div>
+      )}
       {talentNextCatalog.length ? (
         <div className="divide-y divide-amber-100 rounded-lg border border-amber-100 bg-white">
           {talentNextCatalog.map((course) => {
@@ -710,9 +778,21 @@ export function TrainingTemplates() {
                 </div>
               ))}
             </div>
-            {(previewTemplate?.talentnextCourses || []).length > 0 && (
-              <section className="border-t border-slate-200 pt-3">
+            <section className="border-t border-slate-200 pt-3">
+              <div className="flex flex-wrap items-center justify-between gap-2">
                 <h3 className="text-xs font-bold uppercase tracking-wider text-slate-700">TalentNext courses</h3>
+                <button
+                  type="button"
+                  onClick={() => {
+                    setIsEditingTemplate(true);
+                    setShowAddTalentNextCourse(true);
+                  }}
+                  className="inline-flex items-center gap-1 rounded-lg border border-amber-300 bg-white px-2.5 py-1.5 text-xs font-bold text-amber-800 hover:bg-amber-50"
+                >
+                  <Plus className="h-3.5 w-3.5" /> Add courses
+                </button>
+              </div>
+              {(previewTemplate?.talentnextCourses || []).length > 0 ? (
                 <ul className="mt-2 divide-y divide-slate-100 border-y border-slate-100">
                   {previewTemplate.talentnextCourses.map((assignment) => (
                     <li key={assignment.courseId} className="flex items-center justify-between gap-3 py-2 text-xs">
@@ -721,8 +801,8 @@ export function TrainingTemplates() {
                     </li>
                   ))}
                 </ul>
-              </section>
-            )}
+              ) : <p className="mt-2 rounded-lg border border-dashed border-slate-200 px-3 py-4 text-center text-xs text-slate-500">No TalentNext courses are attached to this template.</p>}
+            </section>
           </div>
         )}
       </Modal>

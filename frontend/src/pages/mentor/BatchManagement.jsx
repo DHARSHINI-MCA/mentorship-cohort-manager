@@ -105,6 +105,7 @@ export default function BatchManagement() {
       return res.data || [];
     },
   });
+  const selectedCohort = availableCohorts.find((cohort) => String(cohort.id) === String(cohortId));
 
   const {
     data: batchDetails,
@@ -305,6 +306,12 @@ export default function BatchManagement() {
     }
     if (sessionFormData.endTime <= sessionFormData.startTime) {
       showToast('End time must be later than start time', 'error');
+      return;
+    }
+    const isBeforeCohort = selectedCohort?.startDate && sessionFormData.sessionDate < selectedCohort.startDate;
+    const isAfterCohort = selectedCohort?.endDate && sessionFormData.sessionDate > selectedCohort.endDate;
+    if (isBeforeCohort || isAfterCohort) {
+      showToast('Session date must fall within the cohort timeline', 'error');
       return;
     }
     createSessionMutation.mutate(sessionFormData);
@@ -815,6 +822,8 @@ export default function BatchManagement() {
                 type="date"
                 value={sessionFormData.sessionDate}
                 onChange={(event) => setSessionFormData({ ...sessionFormData, sessionDate: event.target.value })}
+                min={selectedCohort?.startDate || undefined}
+                max={selectedCohort?.endDate || undefined}
                 required
               />
             </div>

@@ -291,6 +291,10 @@ export function CohortsList() {
       showToast('Please provide cohort name, start date, and end date', 'warning');
       return;
     }
+    if (endDate < startDate) {
+      showToast('Cohort end date must be on or after the start date', 'error');
+      return;
+    }
 
     const payload = {
       name,
@@ -476,6 +480,7 @@ export function CohortsList() {
                   type="date"
                   value={startDate}
                   onChange={(e) => setStartDate(e.target.value)}
+                  max={endDate || undefined}
                   required
                   className="w-full px-3 py-2 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500 text-xs font-semibold"
                 />
@@ -488,9 +493,13 @@ export function CohortsList() {
                   type="date"
                   value={endDate}
                   onChange={(e) => setEndDate(e.target.value)}
+                  min={startDate || undefined}
                   required
                   className="w-full px-3 py-2 rounded-xl border border-slate-200 focus:outline-none focus:ring-2 focus:ring-emerald-500 text-xs font-semibold"
                 />
+                {startDate && endDate && endDate < startDate && (
+                  <p className="mt-1.5 text-xs font-medium text-rose-600">End date must be on or after the start date.</p>
+                )}
               </div>
             </div>
 
